@@ -7,7 +7,7 @@ from ..config import (
 )
 
 
-def generate_portfolios(max_active_measures=3, max_portfolios=None):
+def generate_portfolios(max_active_measures=3, max_portfolios=None, required_interventions=None):
     portfolios = []
     for combo in product(LEVELS, repeat=len(INTERVENTION_KEYS)):
         p = dict(zip(INTERVENTION_KEYS, combo))
@@ -15,6 +15,10 @@ def generate_portfolios(max_active_measures=3, max_portfolios=None):
             continue
         if sum(1 for v in p.values() if v > 0) > max_active_measures:
             continue
+        # If user requires certain interventions, skip portfolios without them
+        if required_interventions:
+            if not all(p.get(k, 0) > 0 for k in required_interventions):
+                continue
         portfolios.append(p)
     if max_portfolios:
         portfolios = portfolios[:max_portfolios]

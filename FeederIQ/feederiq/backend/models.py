@@ -10,6 +10,7 @@ class ScenarioRequest(BaseModel):
     dc_timeline_label: str = "12m"
     max_active_measures: int = 3
     max_portfolios: Optional[int] = 60
+    required_interventions: Optional[list] = None  # e.g. ["Battery", "DemandTariff"]
 
 
 class ViolationSummary(BaseModel):

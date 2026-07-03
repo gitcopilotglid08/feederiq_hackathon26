@@ -295,6 +295,19 @@ if st.session_state.running and st.session_state.study_data is None:
     agent_container = st.empty()
     progress = st.progress(0)
 
+    # Build required interventions list from filter checkboxes
+    req_interventions = []
+    if filter_mc:
+        req_interventions.append("ManagedCharging")
+    if filter_pi:
+        req_interventions.append("PhasedInterconnection")
+    if filter_dt:
+        req_interventions.append("DemandTariff")
+    if filter_battery:
+        req_interventions.append("Battery")
+    if filter_tu:
+        req_interventions.append("TransformerUpgrade")
+
     payload = {
         "horizon_label": horizon,
         "ev_level": ev_level,
@@ -303,6 +316,7 @@ if st.session_state.running and st.session_state.study_data is None:
         "dc_timeline_label": dc_timeline,
         "max_active_measures": max_active,
         "max_portfolios": max_portfolios,
+        "required_interventions": req_interventions if req_interventions else None,
     }
 
     api_done = False
@@ -344,26 +358,6 @@ if st.session_state.running and st.session_state.study_data is None:
 if st.session_state.study_data:
     data = st.session_state.study_data
     ranking = data.get("ranking", [])
-
-    # Apply filters
-    filters = {}
-    if filter_battery:
-        filters["Battery"] = True
-    if filter_mc:
-        filters["ManagedCharging"] = True
-    if filter_pi:
-        filters["PhasedInterconnection"] = True
-    if filter_dt:
-        filters["DemandTariff"] = True
-    if filter_tu:
-        filters["TransformerUpgrade"] = True
-
-    if filters:
-        filtered = [r for r in ranking if all(r.get(k, 0) > 0 for k in filters)]
-        if filtered:
-            ranking = filtered
-        else:
-            st.warning("No portfolios in the evaluated set contain all selected interventions. Showing unfiltered results. Try evaluating more candidate portfolios or reducing required interventions.")
 
     # Tabs
     tab_rec, tab_rank, tab_baseline, tab_profiles, tab_memo = st.tabs([

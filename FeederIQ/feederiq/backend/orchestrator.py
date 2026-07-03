@@ -35,6 +35,7 @@ class StudyState(TypedDict):
     # Inputs
     scenario: dict
     max_portfolios: int
+    required_interventions: list
     # Intermediate
     profiles_records: list  # serializable list of dicts
     assumptions: dict
@@ -103,7 +104,8 @@ def nwa_node(state: StudyState) -> dict:
     agent = NWAAgent()
     max_p = min(state.get("max_portfolios", 30), 30)
     profiles = _records_to_df(state["profiles_records"])
-    nwa_scored = agent.run(profiles, state["base_summary"], max_portfolios=max_p)
+    required = state.get("required_interventions") or None
+    nwa_scored = agent.run(profiles, state["base_summary"], max_portfolios=max_p, required_interventions=required)
 
     best_nwa_name = nwa_scored[0]["portfolio_name"] if nwa_scored else "None"
     best_nwa_score = nwa_scored[0]["final_score"] if nwa_scored else 0
@@ -124,7 +126,8 @@ def capex_node(state: StudyState) -> dict:
     agent = CapexAgent()
     max_p = min(state.get("max_portfolios", 30), 30)
     profiles = _records_to_df(state["profiles_records"])
-    capex_scored = agent.run(profiles, state["base_summary"], max_portfolios=max_p)
+    required = state.get("required_interventions") or None
+    capex_scored = agent.run(profiles, state["base_summary"], max_portfolios=max_p, required_interventions=required)
     return {"capex_scored": capex_scored}
 
 
@@ -195,12 +198,13 @@ def build_graph():
     )
 
 
-def run_study(scenario: dict, max_portfolios: int = 60, thread_id: str = "default"):
+def run_study(scenario: dict, max_portfolios: int = 60, thread_id: str = "default", required_interventions: list = None):
     """Run without interrupts (auto-approve). Used by the API for non-interactive mode."""
     graph = build_graph()
     initial_state = {
         "scenario": scenario,
         "max_portfolios": max_portfolios,
+        "required_interventions": required_interventions or [],
         "profiles_records": [],
         "assumptions": {},
         "base_results": [],

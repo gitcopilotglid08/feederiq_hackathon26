@@ -6,8 +6,8 @@ from ..simulation.portfolios import apply_portfolio_to_profiles, line_capacity_m
 class CapexAgent:
     """Generates hybrid and capex-heavy portfolios (includes TransformerUpgrade)."""
 
-    def run(self, profiles, base_summary: dict, max_portfolios: int = 30) -> list:
-        all_portfolios = generate_portfolios(max_active_measures=3)
+    def run(self, profiles, base_summary: dict, max_portfolios: int = 30, required_interventions: list = None) -> list:
+        all_portfolios = generate_portfolios(max_active_measures=3, required_interventions=required_interventions)
         capex_portfolios = [p for p in all_portfolios if p["TransformerUpgrade"] > 0]
         capex_portfolios = capex_portfolios[:max_portfolios]
 

@@ -7,9 +7,9 @@ from ..config import INTERVENTION_KEYS
 class NWAAgent:
     """Generates and evaluates Non-Wires Alternative portfolios (no TransformerUpgrade)."""
 
-    def run(self, profiles, base_summary: dict, max_portfolios: int = 30) -> list:
+    def run(self, profiles, base_summary: dict, max_portfolios: int = 30, required_interventions: list = None) -> list:
         # Generate NWA-only portfolios (TransformerUpgrade forced to 0)
-        all_portfolios = generate_portfolios(max_active_measures=3)
+        all_portfolios = generate_portfolios(max_active_measures=3, required_interventions=required_interventions)
         nwa_portfolios = [p for p in all_portfolios if p["TransformerUpgrade"] == 0]
         nwa_portfolios = nwa_portfolios[:max_portfolios]
 

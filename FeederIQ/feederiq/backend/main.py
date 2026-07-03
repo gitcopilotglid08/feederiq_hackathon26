@@ -40,7 +40,9 @@ def create_study(req: ScenarioRequest):
         "dc_timeline_label": req.dc_timeline_label,
     }
     try:
-        result = run_study(scenario, max_portfolios=req.max_portfolios or 60, thread_id=study_id)
+        result = run_study(scenario, max_portfolios=req.max_portfolios or 60,
+                           thread_id=study_id,
+                           required_interventions=req.required_interventions)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Study failed: {str(e)}\n{traceback.format_exc()}")
 
