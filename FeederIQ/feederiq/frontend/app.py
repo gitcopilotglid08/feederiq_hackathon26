@@ -66,8 +66,11 @@ st.markdown(f"""
     .sidebar-section {{ font: 700 0.82rem Arial,sans-serif; color:{C_DARK}; margin: 12px 0 4px; }}
     .optional-tag {{ font: 400 0.68rem Arial,sans-serif; color:{C2}; font-style:italic; }}
 
-    .memo-area h1 {{ font-size: 1.2rem; }}
-    .memo-area h2 {{ font-size: 1rem; }}
+    .memo-area h1 {{ font-size: 1.05rem; font-weight:700; color:{C_DARK}; }}
+    .memo-area h2 {{ font-size: 0.92rem; font-weight:700; color:{C_DARK}; }}
+    .memo-area p {{ font-size: 0.85rem; }}
+    .memo-area table {{ font-size: 0.82rem; }}
+    .memo-area li {{ font-size: 0.82rem; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -365,6 +368,24 @@ if st.session_state.study_data:
 
     # ═══ RECOMMENDATION ═══════════════════════════════════════════════════════
     with tab_rec:
+        # Score scale graphic above recommendation
+        st.markdown(f'''<div style="background:#F5F5F5;border-radius:6px;padding:10px 16px;margin-bottom:14px;">
+            <div style="font:600 0.78rem Arial;color:{C_DARK};margin-bottom:6px;">Score Scale (weighted across Grid Relief, Cost, Speed, and ESG)</div>
+            <div style="display:flex;align-items:center;gap:0;height:14px;border-radius:7px;overflow:hidden;">
+                <div style="flex:1;background:#C92A2A;height:100%;"></div>
+                <div style="flex:1;background:#E06030;height:100%;"></div>
+                <div style="flex:1;background:#E88D14;height:100%;"></div>
+                <div style="flex:1;background:#D4A017;height:100%;"></div>
+                <div style="flex:1;background:#7CB342;height:100%;"></div>
+                <div style="flex:1;background:#1B8C3A;height:100%;"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:4px;">
+                <span style="font:600 0.7rem Arial;color:{C_GREY};">0 — No improvement</span>
+                <span style="font:600 0.7rem Arial;color:{C_GREY};">5 — Moderate</span>
+                <span style="font:600 0.7rem Arial;color:{C_GREY};">10 — Fully resolved</span>
+            </div>
+        </div>''', unsafe_allow_html=True)
+
         st.markdown('<div class="sec-head">Recommended Solution</div>', unsafe_allow_html=True)
 
         top10 = ranking[:10]
@@ -374,7 +395,6 @@ if st.session_state.study_data:
             format_func=lambda i: f"#{i+1}  {top10[i]['portfolio_name']}  (Score: {top10[i]['final_score']:.2f} / 10)",
             label_visibility="collapsed"
         )
-        st.caption("Score range: 0 (no improvement) → 10 (fully resolved). Weighted across Grid Relief, Cost, Speed, and ESG.")
         selected = top10[selected_idx]
 
         if data.get("nwa_resolved_all"):
@@ -404,12 +424,13 @@ if st.session_state.study_data:
                 score_bar_html("ESG Alignment (15%)", esg_sc),
                 unsafe_allow_html=True)
             st.markdown(f'''<div class="info-box">
-                <div style="font:400 0.8rem Arial;color:{C_DARK};line-height:1.7;">
+                <div style="font:400 0.88rem Arial;color:{C_DARK};line-height:1.8;">
                 • <b style="color:{C1};">Grid Relief</b> → % reduction in equipment overloads and voltage violations<br>
                 • <b style="color:{C1};">Cost Efficiency</b> → Lower implementation cost relative to full capex alternatives<br>
                 • <b style="color:{C1};">Speed to Value</b> → Combined feasibility and deployment timeline<br>
                 • <b style="color:{C1};">ESG Alignment</b> → Sustainability benefit: lower carbon, less material intensity
                 </div>
+                <div style="font:italic 400 0.72rem Arial;color:{C_GREY};margin-top:6px;">*Scoring framework aligned with CPUC IRP (D.22-02-004) and NY REV BCA methodology.</div>
             </div>''', unsafe_allow_html=True)
 
         with col_radar:
