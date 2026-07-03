@@ -1,0 +1,192 @@
+# FeederIQ – Agentic Distribution Planning
+
+An AI-powered planning copilot that forecasts feeder congestion under load-growth scenarios and recommends the cheapest fix — prioritizing **non-wires alternatives** (NWA) before expensive capex.
+
+## Quick Start
+
+### Prerequisites
+
+- Python 3.12+
+- Windows (OpenDSS engine is Windows-native)
+- Virtual environment at `.venv/`
+
+### Install Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### Run the Backend (FastAPI)
+
+Before starting the backend, kill any previous session occupying port 8000 to avoid `[WinError 10013]`:
+
+```powershell
+Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
+```
+
+Then start the server:
+
+```bash
+python run_backend.py
+```
+
+This starts the API server at **http://localhost:8000**.
+
+### Run the Frontend (Streamlit)
+
+In a separate terminal:
+
+```bash
+python run_frontend.py
+```
+
+This opens the UI at **http://localhost:8501**.
+
+---
+
+## API Reference
+
+### `GET /health`
+
+Health check.
+
+```json
+{"status": "ok"}
+```
+
+### `GET /options`
+
+Returns all available scenario options for building the frontend UI.
+
+```json
+{
+  "planning_horizons": ["6m", "12m", "18m", "3yr", "5yr"],
+  "ev_levels": ["Low", "Base", "High"],
+  "solar_levels": ["Low", "Base", "High"],
+  "dc_levels": ["Low", "Moderate", "High"],
+  "dc_timelines": ["6m", "12m", "18m"],
+  "interventions": ["TransformerUpgrade", "Battery", "ManagedCharging", "PhasedInterconnection", "DemandTariff"],
+  "levels": [0, 33, 66, 100],
+  "scoring_weights": {"technical": 0.4, "cost": 0.25, "feasibility": 0.2, "deployment": 0.15}
+}
+```
+
+### `POST /study`
+
+Run a full planning study. Returns results synchronously.
+
+**Request body:**
+
+```json
+{
+  "horizon_label": "12m",
+  "ev_level": "Base",
+  "solar_level": "Base",
+  "dc_level": "Moderate",
+  "dc_timeline_label": "12m",
+  "max_active_measures": 3,
+  "max_portfolios": 60
+}
+```
+
+**Response (abbreviated):**
+
+```json
+{
+  "study_id": "uuid",
+  "scenario": { ... },
+  "base_summary": {
+    "grid_stress_score": 3490.0,
+    "total_undervoltage_buses": 0,
+    "total_line_overloads": 478,
+    "total_transformer_overloads": 72,
+    ...
+  },
+  "top_recommendation": {
+    "portfolio_name": "PhasedInterconnection:66",
+    "final_score": 6.854,
+    "technical_improvement_pct": 38.97,
+    "cost_score": 9.23,
+    ...
+  },
+  "ranking": [ ... ],
+  "profiles": {
+    "time": ["00:00", "01:00", ...],
+    "feeder_mult": [...],
+    "ev_mw": [...],
+    "solar_mw": [...],
+    "dc_mw": [...]
+  },
+  "base_results": [ ... ],
+  "nwa_resolved_all": false,
+  "memo": "# FeederIQ Decision Memo\n...",
+  "checkpoints": [
+    {"step": "scenario", "message": "...", "requires_approval": false},
+    {"step": "constraint_analysis", "message": "...", "requires_approval": true},
+    {"step": "nwa_evaluation", "message": "...", "requires_approval": true},
+    {"step": "recommendation", "message": "...", "requires_approval": false}
+  ]
+}
+```
+
+### `GET /study/{study_id}`
+
+Retrieve a previously computed study by its ID.
+
+---
+
+## Scenario Parameters
+
+| Parameter | Options | Description |
+|-----------|---------|-------------|
+| `horizon_label` | 6m, 12m, 18m, 3yr, 5yr | Planning horizon |
+| `ev_level` | Low, Base, High | EV growth rate (15%, 20%, 25% annual) |
+| `solar_level` | Low, Base, High | Solar adoption (100, 200, 300 MW) |
+| `dc_level` | Low, Moderate, High | Data center size (1.0, 1.75, 3.0 MW) |
+| `dc_timeline_label` | 6m, 12m, 18m | When data center comes online |
+| `max_active_measures` | 1–5 | Max interventions per portfolio |
+| `max_portfolios` | 10–120 | How many portfolios to evaluate |
+
+---
+
+## Agent Architecture
+
+The backend uses **LangGraph** for orchestration with human-in-the-loop checkpoints:
+
+1. **Scenario Agent** – Converts selections into numeric growth assumptions and 24-hour profiles
+2. **Simulation Agent** – Runs OpenDSS 24-hour power flow (baseline)
+3. **Constraint Agent** – Detects voltage violations and equipment overloads ← *[CHECKPOINT]*
+4. **NWA Agent** – Evaluates non-wires alternative portfolios ← *[CHECKPOINT]*
+5. **Capex Agent** – Evaluates hybrid/capex options (skipped if NWA resolves all)
+6. **Recommendation Agent** – Ranks all options and generates decision memo
+
+---
+
+## Scoring Framework
+
+Portfolios are scored on 4 dimensions (weighted sum):
+
+- **Technical effectiveness** (40%) – % reduction in grid stress score
+- **Cost** (25%) – Lower cost = higher score
+- **Feasibility** (20%) – Regulatory/political ease of implementation
+- **Deployment speed** (15%) – How quickly the solution can be deployed
+
+NWA options inherently score higher on cost, feasibility, and deployment speed.
+
+---
+
+## Performance
+
+- Feeder compile: 0.014s (master_lite.dss with stub shapes)
+- Full study (10 portfolios): ~15s
+- Full study (60 portfolios): ~90s
+
+---
+
+## Tech Stack
+
+- **Backend**: FastAPI + Uvicorn
+- **Frontend**: Streamlit + Plotly
+- **Orchestration**: LangGraph (with interrupt-based human-in-the-loop)
+- **Simulation**: OpenDSS via opendssdirect.py
+- **Feeder model**: IEEE 123-bus (openEDI/oedisi-ieee123, BSD-3-Clause)
