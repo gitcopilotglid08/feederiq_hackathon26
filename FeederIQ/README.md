@@ -88,7 +88,7 @@ Returns all available scenario options for building the frontend UI.
 
 ```json
 {
-  "planning_horizons": ["6m", "12m", "18m", "3yr", "5yr"],
+  "planning_horizons": ["3m", "6m", "12m", "18m", "3yr", "5yr"],
   "ev_levels": ["Low", "Base", "High"],
   "solar_levels": ["Low", "Base", "High"],
   "dc_levels": ["Low", "Moderate", "High"],
@@ -192,16 +192,16 @@ The backend uses **LangGraph** for orchestration with human-in-the-loop checkpoi
 
 ## Scoring Framework
 
-Portfolios are scored on 4 dimensions (weighted sum):
+Portfolios are scored on 4 dimensions (weighted sum, scale 0–10):
 
-- **Technical effectiveness** (40%) – % reduction in grid stress score
-- **Cost** (25%) – Lower cost = higher score
-- **Feasibility** (20%) – Regulatory/political ease of implementation
-- **Deployment speed** (15%) – How quickly the solution can be deployed
+- **Grid Relief** (40%) – % reduction in equipment overloads and voltage violations
+- **Cost Efficiency** (25%) – Lower implementation cost relative to full capex
+- **Speed to Value** (20%) – Combined feasibility and deployment timeline
+- **ESG Alignment** (15%) – Sustainability benefit (lower carbon, less material intensity)
 
-**The system does not simply recommend the cheapest option.** All dimension scores are exposed in the ranking table, so planners can sort/filter by any single criterion and select based on their operational priority — fastest to deploy, most technically effective, lowest cost, or best overall weighted score.
+**The system does not simply recommend the cheapest option.** All dimension scores are exposed in the ranking table, so planners can sort/filter by any single criterion and select based on their operational priority.
 
-NWA options inherently score higher on cost, feasibility, and deployment speed.
+NWA options inherently score higher across cost, speed, and ESG dimensions. See `assumptions_rationale.md` for full market-backed defensibility of all scores.
 
 ---
 

@@ -149,10 +149,10 @@ vaibhav/
 ## Multi-Criteria Selection Logic
 
 The system does **not** recommend solely based on cost. It uses a multi-criteria weighted scoring framework:
-- **Technical improvement (40%)** — % reduction in grid stress score
-- **Cost attractiveness (25%)** — lower cost = higher score
-- **Feasibility (20%)** — regulatory/political/operational ease
-- **Deployment speed (15%)** — how fast the solution can be deployed
+- **Grid Relief (40%)** — % reduction in equipment overloads and voltage violations
+- **Cost Efficiency (25%)** — lower implementation cost relative to full capex
+- **Speed to Value (20%)** — combined feasibility and deployment timeline
+- **ESG Alignment (15%)** — sustainability benefit (lower carbon, less material intensity)
 
 All dimension scores are exposed in the ranking table. Planners can select based on their operational priority (e.g., fastest deployment, highest technical improvement, or lowest cost) — not only the weighted total.
 

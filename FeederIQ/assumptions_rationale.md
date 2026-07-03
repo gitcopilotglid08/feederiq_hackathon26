@@ -113,12 +113,68 @@ Measures time-to-benefit. Scale: 10 = immediate, 1 = multiple years. Based on DO
 
 | Criterion | Weight | Justification |
 |---|---|---|
-| Technical effectiveness | 40% | Must resolve reliability issues — NERC TPL standards require N-1 compliance |
-| Cost attractiveness | 25% | PUC prudency review requires cost-benefit demonstration |
-| Feasibility | 20% | Regulators prefer proven, implementable solutions |
-| Deployment speed | 15% | Deferral value increases with faster deployment (time value of capital) |
+| Grid Relief (technical) | 40% | Must resolve reliability issues — NERC TPL standards require N-1 compliance |
+| Cost Efficiency | 25% | PUC prudency review requires cost-benefit demonstration |
+| Speed to Value | 20% | Merged feasibility + deployment. Deferral value increases with faster deployment |
+| ESG Alignment | 15% | Sustainability mandate — PwC ESG practice, SEC climate disclosure rule, utility IRPs |
 
-**Source**: Aligned with California CPUC IRP scoring framework (D.22-02-004) and New York REV benefit-cost analysis methodology (BCA Handbook, 2024).
+**Source**: Aligned with California CPUC IRP scoring framework (D.22-02-004), New York REV benefit-cost analysis methodology (BCA Handbook, 2024), and SEC Final Rule on Climate-Related Disclosures (2024).
+
+---
+
+## 5a. ESG Alignment Scoring
+
+### Why ESG Is a Scoring Dimension
+
+US utilities face increasing ESG reporting obligations:
+- **SEC Climate Rule (2024)**: Requires disclosure of climate-related risks and GHG emissions for public companies.
+- **State mandates**: CA SB 253/261, NY Climate Leadership Act — require Scope 1-3 emissions tracking.
+- **PUC proceedings**: CPUC, NYPSC, and MPUC now include carbon/environmental metrics in IRP and rate case evaluation.
+- **PwC ESG practice**: Largest Big4 ESG advisory practice; clients expect sustainability-aligned recommendations.
+
+### ESG Score Methodology
+
+Scores are based on **lifecycle carbon intensity** and **material intensity** of each intervention, derived from:
+- IEA "The Role of Critical Minerals in Clean Energy Transitions" (2023)
+- EPRI "Lifecycle Emissions of Grid Technologies" (2022)
+- NREL "Life Cycle Greenhouse Gas Emissions from Electricity Generation" (2021)
+- DOE "Pathways to Commercial Liftoff: Virtual Power Plants" (2023)
+
+| Intervention | Level | ESG Score | Rationale |
+|---|---|---|---|
+| **Transformer Upgrade** | 33% | 7 | Single unit: ~15-25 tonnes CO2e embodied (steel, copper, mineral oil). Source: EPRI LCA 2022 |
+| | 66% | 5 | Multiple units: 30-50 tonnes CO2e + construction emissions + SF6 risk in older switchgear |
+| | 100% | 3 | Full substation: 50-100+ tonnes CO2e, significant material extraction, 20+ year asset lock-in |
+| **Battery Storage** | 33% | 8 | Li-ion mining impact offset by enabling renewable integration and reducing curtailment |
+| | 66% | 7 | Greater mining/manufacturing footprint; still net-positive via fossil peaker displacement |
+| | 100% | 6 | Large-scale BESS: ~40-60 tonnes CO2e per MWh capacity (NREL 2021), but avoids gas peakers |
+| **Managed EV Charging** | 33% | 9 | Pure software/controls: near-zero additional carbon, reduces peak fossil generation |
+| | 66% | 9 | Same: behavioral/software intervention, shifts load from peak fossil hours to off-peak/renewable |
+| | 100% | 9 | Maximum demand shifting: estimated 0.3-0.5 tonnes CO2 avoided per EV annually (DOE VPP 2023) |
+| **Phased Interconnection** | 33% | 9 | Administrative controls; reduces peak demand without new physical assets |
+| | 66% | 8 | Some monitoring equipment; still primarily operational/contractual |
+| | 100% | 7 | Staged connection requires some grid-side reinforcement, but far less than full upgrade |
+| **Demand Tariff** | 33% | 9 | Price signals via existing AMI: zero additional carbon, behavioral demand reduction |
+| | 66% | 9 | Expanded program: leverages existing infrastructure, reduces peak fossil dispatch |
+| | 100% | 9 | Full dynamic pricing: DOE estimates 10-15% peak reduction → proportional carbon savings |
+
+### Key Insight
+
+**Software/behavioral interventions** (Managed Charging, Demand Tariff) achieve ESG scores of 9/10 at all deployment levels because they:
+1. Require no new physical materials or manufacturing
+2. Actively reduce peak demand → displaces marginal fossil generation (typically gas CT)
+3. Leverage existing infrastructure (AMI, smart chargers, billing systems)
+
+**Physical infrastructure** (Transformer Upgrade) scores lowest because:
+1. High embodied carbon: steel (1.8 tCO2/tonne), copper (3.5 tCO2/tonne), mineral oil
+2. Manufacturing and transport emissions
+3. 20-40 year asset lock-in with no flexibility to adapt to changing load patterns
+4. Land use and construction site impacts
+
+**Battery** scores in-between because while mining/manufacturing has environmental impact, batteries provide net-positive sustainability outcomes by:
+1. Enabling higher renewable penetration (reduced curtailment)
+2. Displacing fossil peaker plants during peak hours
+3. Providing frequency regulation (reduces system-wide emissions)
 
 ---
 

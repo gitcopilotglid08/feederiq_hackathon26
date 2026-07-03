@@ -72,7 +72,7 @@ def create_study(req: ScenarioRequest):
         "base_summary": base_summary,
         "top_recommendation": top_rec,
         "second_best": second,
-        "ranking": ranking[:20],
+        "ranking": ranking,
         "profiles": profiles_json,
         "base_results": result.get("base_results", []),
         "nwa_resolved_all": result.get("nwa_resolved_all", False),
