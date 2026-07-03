@@ -97,6 +97,7 @@ def get_options():
         PLANNING_HORIZONS, EV_GROWTH, SOLAR_ADOPTION,
         DATA_CENTER_MW, DATA_CENTER_TIMELINE_MONTHS,
         INTERVENTION_KEYS, LEVELS, SCORING_WEIGHTS,
+        LEVEL_LABELS, INTERVENTION_LABELS,
     )
     return {
         "planning_horizons": list(PLANNING_HORIZONS.keys()),
@@ -105,6 +106,8 @@ def get_options():
         "dc_levels": list(DATA_CENTER_MW.keys()),
         "dc_timelines": list(DATA_CENTER_TIMELINE_MONTHS.keys()),
         "interventions": INTERVENTION_KEYS,
+        "intervention_labels": INTERVENTION_LABELS,
         "levels": LEVELS,
+        "level_labels": LEVEL_LABELS,
         "scoring_weights": SCORING_WEIGHTS,
     }

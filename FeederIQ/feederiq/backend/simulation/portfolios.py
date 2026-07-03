@@ -1,8 +1,8 @@
 import numpy as np
 from itertools import product
 from ..config import (
-    INTERVENTION_KEYS, LEVELS,
-    COST_BY_LEVEL, FEASIBILITY_BY_LEVEL, DEPLOYMENT_BY_LEVEL,
+    INTERVENTION_KEYS, LEVELS, LEVEL_LABELS, INTERVENTION_LABELS,
+    COST_BY_LEVEL, FEASIBILITY_BY_LEVEL, DEPLOYMENT_BY_LEVEL, ESG_BY_LEVEL,
     SCORING_WEIGHTS,
 )
 
@@ -95,29 +95,44 @@ def score_portfolio(portfolio, improvement_pct):
     cost_raw = sum(COST_BY_LEVEL[k][v] for k, v in portfolio.items())
     feasibility_raw = float(np.mean([FEASIBILITY_BY_LEVEL[k][v] for k, v in portfolio.items()]))
     deployment_raw = float(np.mean([DEPLOYMENT_BY_LEVEL[k][v] for k, v in portfolio.items()]))
+    esg_raw = float(np.mean([ESG_BY_LEVEL[k][v] for k, v in portfolio.items()]))
 
     max_cost = sum(max(v.values()) for v in COST_BY_LEVEL.values())
     cost_score = 10 * (1 - cost_raw / max_cost)
     tech_score = min(10.0, improvement_pct / 10.0)
+    # Speed to Value = average of feasibility + deployment
+    speed_score = (feasibility_raw + deployment_raw) / 2.0
 
     w = SCORING_WEIGHTS
-    final = w["technical"] * tech_score + w["cost"] * cost_score + w["feasibility"] * feasibility_raw + w["deployment"] * deployment_raw
+    final = (w["technical"] * tech_score + w["cost"] * cost_score +
+             w["speed_to_value"] * speed_score + w["esg"] * esg_raw)
 
-    active = [f"{k}:{v}" for k, v in portfolio.items() if v > 0]
-    name = "BaseCase" if not active else " | ".join(active)
+    # Human-friendly portfolio name
+    active = []
+    for k, v in portfolio.items():
+        if v > 0:
+            label = INTERVENTION_LABELS.get(k, k)
+            level_label = LEVEL_LABELS.get(v, str(v))
+            active.append(f"{label} ({level_label})")
+    name = "Base Case" if not active else " + ".join(active)
 
     return {
         **portfolio,
         "portfolio_name": name,
         "technical_improvement_pct": round(improvement_pct, 2),
-        "technical_score": round(tech_score, 2),
+        "grid_relief_score": round(tech_score, 2),
         "cost_score": round(cost_score, 2),
-        "feasibility_score": round(feasibility_raw, 2),
-        "deployment_score": round(deployment_raw, 2),
+        "speed_to_value_score": round(speed_score, 2),
+        "esg_score": round(esg_raw, 2),
         "final_score": round(final, 3),
     }
 
 
 def portfolio_name(portfolio):
-    active = [f"{k}:{v}" for k, v in portfolio.items() if v > 0]
-    return "BaseCase" if not active else " | ".join(active)
+    active = []
+    for k, v in portfolio.items():
+        if v > 0:
+            label = INTERVENTION_LABELS.get(k, k)
+            level_label = LEVEL_LABELS.get(v, str(v))
+            active.append(f"{label} ({level_label})")
+    return "Base Case" if not active else " + ".join(active)

@@ -1,325 +1,99 @@
 """
-FeederIQ – Streamlit Frontend (PwC Hackathon R2)
-Premium wizard-style UI with tile navigation, agent visualization,
-grid maps, and multi-criteria portfolio ranking.
+FeederIQ – Streamlit Frontend (PwC Hackathon R2 v2)
+White background, sidebar config, animated agents, HITL, filter, top-10 dropdown.
 """
 import time
 import requests
 import streamlit as st
 import plotly.graph_objects as go
-import plotly.express as px
 import pandas as pd
 import numpy as np
 
-# ─── Page Config ──────────────────────────────────────────────────────────────
-st.set_page_config(
-    page_title="FeederIQ – PwC Distribution Planning",
-    page_icon="⚡",
-    layout="wide",
-    initial_sidebar_state="collapsed",
-)
+st.set_page_config(page_title="FeederIQ", page_icon="⚡", layout="wide")
 
 API_URL = "http://localhost:8000"
 
-# ─── PwC Brand Colors ────────────────────────────────────────────────────────
-PWC_ORANGE = "#D04A02"
-PWC_ORANGE_LIGHT = "#EB8C00"
-PWC_ORANGE_PALE = "#FFF3E8"
-PWC_DARK = "#2D2D2D"
-PWC_GREY = "#6B6B6B"
-PWC_LIGHT_GREY = "#F7F7F7"
-PWC_WHITE = "#FFFFFF"
-PWC_GREEN = "#22992E"
-PWC_RED = "#E0301E"
+# ─── Colors ───────────────────────────────────────────────────────────────────
+C_ORANGE = "#D85604"
+C_GOLD = "#E88D14"
+C_DARK = "#2D2D2D"
+C_GREY = "#7A7A7A"
+C_LIGHT = "#F9F9F9"
+C_GREEN = "#1B8C3A"
+C_RED = "#C92A2A"
 
-# ─── Custom CSS ───────────────────────────────────────────────────────────────
+# ─── CSS ──────────────────────────────────────────────────────────────────────
 st.markdown(f"""
 <style>
-    /* Global */
-    .stApp {{
-        background-color: {PWC_LIGHT_GREY};
-    }}
-    .main .block-container {{
-        padding-top: 1rem;
-        max-width: 1200px;
-    }}
+    .stApp {{ background: white; }}
+    .main .block-container {{ padding-top: 0.8rem; max-width: 1100px; }}
+    section[data-testid="stSidebar"] {{ background: {C_LIGHT}; border-right: 1px solid #E8E8E8; }}
+    section[data-testid="stSidebar"] .block-container {{ padding-top: 1rem; }}
 
-    /* Hide default Streamlit header */
-    header[data-testid="stHeader"] {{
-        background-color: {PWC_DARK};
-    }}
+    .brand {{ display:flex; align-items:center; gap:12px; padding:8px 0 16px 0; border-bottom:2px solid {C_ORANGE}; margin-bottom:16px; }}
+    .brand .logo {{ color:{C_ORANGE}; font:900 1.6rem Georgia,serif; }}
+    .brand .title {{ color:{C_DARK}; font:700 1.1rem Arial,sans-serif; }}
 
-    /* Top brand bar */
-    .brand-bar {{
-        background: {PWC_DARK};
-        padding: 12px 24px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        border-radius: 0 0 8px 8px;
-        margin-bottom: 20px;
-    }}
-    .brand-bar h1 {{
-        color: white;
-        font-size: 1.6rem;
-        margin: 0;
-        font-weight: 700;
-    }}
-    .brand-bar .pwc-logo {{
-        color: {PWC_ORANGE};
-        font-size: 1.8rem;
-        font-weight: 900;
-        font-family: Georgia, serif;
-        letter-spacing: -1px;
-    }}
+    .sec-head {{ font:700 1.2rem Arial,sans-serif; color:{C_DARK}; margin:24px 0 10px; padding-bottom:6px; border-bottom:2px solid {C_ORANGE}; }}
+    .sub-head {{ font:600 0.95rem Arial,sans-serif; color:{C_DARK}; margin:16px 0 6px; }}
 
-    /* Step tiles */
-    .step-container {{
-        display: flex;
-        gap: 6px;
-        margin-bottom: 24px;
-        overflow-x: auto;
-        padding: 4px 0;
-    }}
-    .step-tile {{
-        padding: 10px 16px;
-        border-radius: 8px;
-        font-size: 0.82rem;
-        font-weight: 600;
-        text-align: center;
-        min-width: 120px;
-        cursor: default;
-        transition: all 0.2s;
-        border: 2px solid transparent;
-    }}
-    .step-tile.active {{
-        background: {PWC_ORANGE};
-        color: white;
-        border-color: {PWC_ORANGE};
-        box-shadow: 0 3px 12px rgba(208, 74, 2, 0.3);
-    }}
-    .step-tile.done {{
-        background: {PWC_ORANGE_PALE};
-        color: {PWC_ORANGE};
-        border-color: {PWC_ORANGE_LIGHT};
-    }}
-    .step-tile.pending {{
-        background: {PWC_WHITE};
-        color: {PWC_GREY};
-        border-color: #E0E0E0;
-    }}
+    .card {{ background:white; border-radius:10px; padding:16px 18px; margin-bottom:10px; box-shadow:0 1px 4px rgba(0,0,0,0.06); border:1px solid #EFEFEF; }}
+    .card.highlight {{ border-left:4px solid {C_ORANGE}; }}
+    .card .label {{ font:600 0.72rem Arial,sans-serif; color:{C_GREY}; text-transform:uppercase; letter-spacing:0.4px; margin-bottom:4px; }}
+    .card .val {{ font:700 1.5rem Arial,sans-serif; color:{C_DARK}; }}
+    .card .sub {{ font:400 0.82rem Arial,sans-serif; color:{C_GREY}; margin-top:2px; }}
 
-    /* Cards */
-    .metric-card {{
-        background: white;
-        border-radius: 12px;
-        padding: 20px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-        border-left: 4px solid {PWC_ORANGE};
-        margin-bottom: 12px;
-    }}
-    .metric-card h4 {{
-        margin: 0 0 4px 0;
-        color: {PWC_GREY};
-        font-size: 0.8rem;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }}
-    .metric-card .value {{
-        font-size: 1.8rem;
-        font-weight: 700;
-        color: {PWC_DARK};
-    }}
-    .metric-card .delta {{
-        font-size: 0.85rem;
-        color: {PWC_GREEN};
-    }}
-    .metric-card .delta.negative {{
-        color: {PWC_RED};
-    }}
+    .agent-row {{ display:flex; align-items:center; gap:12px; padding:12px 16px; border-radius:8px; margin-bottom:8px; background:{C_LIGHT}; border:1px solid #E8E8E8; }}
+    .agent-row.done {{ border-left:4px solid {C_GREEN}; background:#F0FFF4; }}
+    .agent-row.running {{ border-left:4px solid {C_ORANGE}; background:#FFF8F0; }}
+    .agent-row .icon {{ font-size:1.3rem; }}
+    .agent-row .name {{ font:700 0.9rem Arial,sans-serif; color:{C_DARK}; }}
+    .agent-row .detail {{ font:400 0.78rem Arial,sans-serif; color:{C_GREY}; }}
 
-    /* Agent cards */
-    .agent-card {{
-        background: white;
-        border-radius: 10px;
-        padding: 16px 20px;
-        margin-bottom: 10px;
-        box-shadow: 0 2px 6px rgba(0,0,0,0.04);
-        display: flex;
-        align-items: center;
-        gap: 14px;
-        border-left: 4px solid #E0E0E0;
-    }}
-    .agent-card.running {{
-        border-left-color: {PWC_ORANGE};
-        background: {PWC_ORANGE_PALE};
-    }}
-    .agent-card.complete {{
-        border-left-color: {PWC_GREEN};
-    }}
-    .agent-card .agent-icon {{
-        font-size: 1.4rem;
-    }}
-    .agent-card .agent-name {{
-        font-weight: 700;
-        color: {PWC_DARK};
-        font-size: 0.95rem;
-    }}
-    .agent-card .agent-detail {{
-        color: {PWC_GREY};
-        font-size: 0.82rem;
-        margin-top: 2px;
-    }}
+    .score-row {{ display:flex; align-items:center; gap:8px; margin-bottom:6px; }}
+    .score-row .lbl {{ font:500 0.82rem Arial,sans-serif; color:{C_GREY}; width:160px; }}
+    .score-row .bar {{ flex:1; height:7px; background:#EFEFEF; border-radius:4px; }}
+    .score-row .fill {{ height:7px; background:{C_ORANGE}; border-radius:4px; }}
+    .score-row .num {{ font:700 0.82rem Arial,sans-serif; color:{C_DARK}; width:50px; text-align:right; }}
 
-    /* Portfolio ranking card */
-    .portfolio-card {{
-        background: white;
-        border-radius: 12px;
-        padding: 20px 24px;
-        margin-bottom: 12px;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
-        border: 1px solid #EEE;
-    }}
-    .portfolio-card.top {{
-        border: 2px solid {PWC_ORANGE};
-        box-shadow: 0 4px 16px rgba(208, 74, 2, 0.12);
-    }}
-    .portfolio-card .rank {{
-        color: {PWC_ORANGE};
-        font-weight: 900;
-        font-size: 1.3rem;
-    }}
-    .portfolio-card .name {{
-        font-weight: 700;
-        font-size: 1.1rem;
-        color: {PWC_DARK};
-    }}
+    .rank-card {{ background:white; border-radius:10px; padding:14px 18px; margin-bottom:8px; border:1px solid #EFEFEF; box-shadow:0 1px 3px rgba(0,0,0,0.04); }}
+    .rank-card.top {{ border:2px solid {C_ORANGE}; }}
+    .rank-card .rc-name {{ font:700 1rem Arial,sans-serif; color:{C_DARK}; }}
+    .rank-card .rc-score {{ font:800 1.2rem Arial,sans-serif; color:{C_ORANGE}; }}
 
-    /* Section headers */
-    .section-header {{
-        font-size: 1.3rem;
-        font-weight: 700;
-        color: {PWC_DARK};
-        margin: 28px 0 16px 0;
-        padding-bottom: 8px;
-        border-bottom: 2px solid {PWC_ORANGE};
-    }}
+    .stButton > button {{ background:{C_ORANGE}; color:white; border:none; border-radius:6px; padding:10px 24px; font:700 0.9rem Arial,sans-serif; }}
+    .stButton > button:hover {{ background:{C_GOLD}; }}
 
-    /* Score bars */
-    .score-bar-bg {{
-        background: #F0F0F0;
-        border-radius: 6px;
-        height: 8px;
-        width: 100%;
-    }}
-    .score-bar-fill {{
-        background: {PWC_ORANGE};
-        border-radius: 6px;
-        height: 8px;
-    }}
-
-    /* Override Streamlit elements */
-    .stButton > button {{
-        background: {PWC_ORANGE};
-        color: white;
-        border: none;
-        border-radius: 8px;
-        padding: 12px 32px;
-        font-weight: 700;
-        font-size: 1rem;
-    }}
-    .stButton > button:hover {{
-        background: {PWC_ORANGE_LIGHT};
-        color: white;
-    }}
-
-    div[data-testid="stDataFrame"] {{
-        border-radius: 10px;
-        overflow: hidden;
-    }}
+    .info-box {{ background:#F8F9FA; border-radius:8px; padding:12px 16px; margin:8px 0; border:1px solid #E8E8E8; }}
+    .info-box .txt {{ font:400 0.84rem Arial,sans-serif; color:{C_DARK}; line-height:1.6; }}
 </style>
 """, unsafe_allow_html=True)
 
 
-# ─── Helper Functions ─────────────────────────────────────────────────────────
+# ─── Helpers ──────────────────────────────────────────────────────────────────
 
-def render_brand_bar():
-    st.markdown("""
-    <div class="brand-bar">
-        <div style="display:flex; align-items:center; gap:16px;">
-            <span class="pwc-logo">pwc</span>
-            <h1>FeederIQ – Agentic Distribution Planning</h1>
-        </div>
-        <div style="color: #AAA; font-size: 0.85rem;">Multi-Criteria Non-Wires Alternative Analysis</div>
-    </div>
-    """, unsafe_allow_html=True)
-
-
-def render_step_tiles(current_step, completed_steps):
-    steps = [
-        ("1", "Planning Horizon"),
-        ("2", "Load Growth"),
-        ("3", "Data Center"),
-        ("4", "Study Config"),
-        ("5", "Agent Execution"),
-        ("6", "Results & Ranking"),
-    ]
-    tiles_html = '<div class="step-container">'
-    for step_id, label in steps:
-        if int(step_id) == current_step:
-            cls = "active"
-        elif int(step_id) in completed_steps:
-            cls = "done"
-        else:
-            cls = "pending"
-        tiles_html += f'<div class="step-tile {cls}">{step_id}. {label}</div>'
-    tiles_html += '</div>'
-    st.markdown(tiles_html, unsafe_allow_html=True)
-
-
-def metric_card(title, value, delta=None, negative=False):
-    delta_html = ""
-    if delta:
-        cls = "negative" if negative else ""
-        delta_html = f'<div class="delta {cls}">{delta}</div>'
-    return f"""
-    <div class="metric-card">
-        <h4>{title}</h4>
-        <div class="value">{value}</div>
-        {delta_html}
-    </div>
-    """
-
-
-def agent_card(icon, name, detail, status="pending"):
-    return f"""
-    <div class="agent-card {status}">
-        <div class="agent-icon">{icon}</div>
-        <div>
-            <div class="agent-name">{name}</div>
-            <div class="agent-detail">{detail}</div>
-        </div>
-    </div>
-    """
+def card(label, value, sub="", highlight=True):
+    cls = "card highlight" if highlight else "card"
+    sub_html = f'<div class="sub">{sub}</div>' if sub else ""
+    return f'<div class="{cls}"><div class="label">{label}</div><div class="val">{value}</div>{sub_html}</div>'
 
 
 def score_bar(label, value, max_val=10):
     pct = min(100, (value / max_val) * 100)
-    return f"""
-    <div style="margin-bottom:8px;">
-        <div style="display:flex; justify-content:space-between; margin-bottom:3px;">
-            <span style="font-size:0.8rem; color:{PWC_GREY};">{label}</span>
-            <span style="font-size:0.8rem; font-weight:700; color:{PWC_DARK};">{value:.1f}/10</span>
-        </div>
-        <div class="score-bar-bg"><div class="score-bar-fill" style="width:{pct}%;"></div></div>
-    </div>
-    """
+    return f'''<div class="score-row">
+        <div class="lbl">{label}</div>
+        <div class="bar"><div class="fill" style="width:{pct}%"></div></div>
+        <div class="num">{value:.1f}</div>
+    </div>'''
+
+
+def friendly_name(portfolio_name):
+    """Already handled by backend now, but fallback."""
+    return portfolio_name
 
 
 def render_grid_map():
-    """Render IEEE 123-bus feeder map using Buscoords.dss."""
     from pathlib import Path
-
     coords_path = Path(__file__).resolve().parent.parent.parent / "ai_synthetic_data" / "Buscoords.dss"
     if not coords_path.exists():
         return None
@@ -336,770 +110,515 @@ def render_grid_map():
                 except ValueError:
                     continue
 
-    # Filter out secondary buses (s prefix) and regulator buses (r suffix)
-    primary_buses = {k: v for k, v in buses.items() if not k.startswith("s") and not k.endswith("r")}
-
+    primary = {k: v for k, v in buses.items() if not k.startswith("s") and not k.endswith("r")}
     ev_buses = {"60", "83", "90", "92", "114"}
     solar_buses = {"66", "80", "92", "104", "110"}
     dc_bus = "67"
 
-    xs, ys, colors, sizes, texts = [], [], [], [], []
-    for bus, (x, y) in primary_buses.items():
+    xs, ys, colors, sizes, hovers, texts = [], [], [], [], [], []
+    for bus, (x, y) in primary.items():
         xs.append(x)
         ys.append(y)
         if bus == dc_bus:
-            colors.append(PWC_RED)
-            sizes.append(16)
-            texts.append(f"Bus {bus}<br>🏢 Data Center")
+            colors.append(C_RED)
+            sizes.append(18)
+            hovers.append(f"<b>Bus {bus}</b><br>🏢 Data Center")
+            texts.append("")
         elif bus in ev_buses and bus in solar_buses:
             colors.append("#7B2D8B")
-            sizes.append(13)
-            texts.append(f"Bus {bus}<br>⚡ EV + ☀️ Solar")
+            sizes.append(14)
+            hovers.append(f"<b>Bus {bus}</b><br>⚡ EV + ☀️ Solar")
+            texts.append(bus)
         elif bus in ev_buses:
-            colors.append(PWC_ORANGE)
-            sizes.append(12)
-            texts.append(f"Bus {bus}<br>⚡ EV Charging")
+            colors.append(C_ORANGE)
+            sizes.append(13)
+            hovers.append(f"<b>Bus {bus}</b><br>⚡ EV Charging")
+            texts.append(bus)
         elif bus in solar_buses:
-            colors.append(PWC_GREEN)
-            sizes.append(12)
-            texts.append(f"Bus {bus}<br>☀️ Solar PV")
+            colors.append(C_GREEN)
+            sizes.append(13)
+            hovers.append(f"<b>Bus {bus}</b><br>☀️ Solar PV")
+            texts.append(bus)
         else:
-            colors.append("#B0B0B0")
-            sizes.append(7)
-            texts.append(f"Bus {bus}")
+            colors.append("#CCCCCC")
+            sizes.append(5)
+            hovers.append(f"Bus {bus}")
+            texts.append("")
 
     fig = go.Figure()
-
     fig.add_trace(go.Scatter(
-        x=xs, y=ys,
-        mode='markers+text',
-        marker=dict(size=sizes, color=colors, line=dict(width=1, color='white')),
-        text=[b for b in primary_buses.keys()],
-        textposition="top center",
-        textfont=dict(size=7, color=PWC_GREY),
-        hovertext=texts,
-        hoverinfo='text',
-        showlegend=False,
+        x=xs, y=ys, mode='markers',
+        marker=dict(size=sizes, color=colors, line=dict(width=0.5, color='white')),
+        text=hovers, hoverinfo='text', showlegend=False,
     ))
-
-    # Legend items
-    for label, color in [("Data Center", PWC_RED), ("EV Charging", PWC_ORANGE),
-                          ("Solar PV", PWC_GREEN), ("EV + Solar", "#7B2D8B"), ("Bus Node", "#B0B0B0")]:
-        fig.add_trace(go.Scatter(
-            x=[None], y=[None], mode='markers',
-            marker=dict(size=10, color=color),
-            name=label,
-        ))
+    # Only label key buses
+    key_xs = [x for x, t in zip(xs, texts) if t]
+    key_ys = [y for y, t in zip(ys, texts) if t]
+    key_texts = [t for t in texts if t]
+    fig.add_trace(go.Scatter(
+        x=key_xs, y=key_ys, mode='text',
+        text=key_texts, textposition="top center",
+        textfont=dict(size=9, color=C_DARK), showlegend=False, hoverinfo='skip',
+    ))
+    # Legend
+    for lbl, clr, sz in [("Data Center", C_RED, 14), ("EV Charging", C_ORANGE, 11),
+                          ("Solar PV", C_GREEN, 11), ("EV + Solar", "#7B2D8B", 11)]:
+        fig.add_trace(go.Scatter(x=[None], y=[None], mode='markers',
+                                  marker=dict(size=sz, color=clr), name=lbl))
 
     fig.update_layout(
-        title=None,
-        height=420,
-        margin=dict(t=10, b=10, l=10, r=10),
-        plot_bgcolor='white',
-        paper_bgcolor='white',
-        xaxis=dict(visible=False),
-        yaxis=dict(visible=False),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5,
-                    font=dict(size=11)),
+        height=360, margin=dict(t=5, b=5, l=5, r=5),
+        plot_bgcolor='white', paper_bgcolor='white',
+        xaxis=dict(visible=False), yaxis=dict(visible=False),
+        legend=dict(orientation="h", y=1.02, x=0.5, xanchor="center", font=dict(size=10)),
     )
     return fig
 
 
-# ─── Session State Init ───────────────────────────────────────────────────────
-if "step" not in st.session_state:
-    st.session_state.step = 1
-if "completed" not in st.session_state:
-    st.session_state.completed = set()
+# ─── Session State ────────────────────────────────────────────────────────────
 if "study_data" not in st.session_state:
     st.session_state.study_data = None
-if "scenario" not in st.session_state:
-    st.session_state.scenario = {
-        "horizon_label": "12m",
-        "ev_level": "Base",
-        "ev_custom": None,
-        "solar_level": "Base",
-        "solar_custom": None,
-        "dc_level": "Moderate",
-        "dc_timeline_label": "12m",
-        "dc_custom": None,
-        "max_active_measures": 3,
-        "max_portfolios": 60,
-    }
+if "running" not in st.session_state:
+    st.session_state.running = False
 
+# ─── Sidebar ──────────────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown('<div class="brand"><span class="logo">pwc</span><span class="title">FeederIQ</span></div>', unsafe_allow_html=True)
 
-def go_to_step(n):
-    st.session_state.step = n
+    st.markdown('<div class="sub-head">📅 Planning Horizon</div>', unsafe_allow_html=True)
+    horizon = st.selectbox("Horizon", ["3m", "6m", "12m", "18m", "3yr", "5yr"],
+                           index=2, format_func=lambda x: {"3m": "3 Months", "6m": "6 Months", "12m": "12 Months",
+                                                            "18m": "18 Months", "3yr": "3 Years", "5yr": "5 Years"}[x],
+                           label_visibility="collapsed")
 
+    st.markdown('<div class="sub-head">⚡ EV Growth</div>', unsafe_allow_html=True)
+    ev_level = st.selectbox("EV", ["Low", "Base", "High"], index=1,
+                            format_func=lambda x: {"Low": "Low (15% annually)", "Base": "Base (20% annually)", "High": "High (25% annually)"}[x],
+                            label_visibility="collapsed")
+    ev_custom = st.number_input("Custom growth %", min_value=5, max_value=50,
+                                value={"Low": 15, "Base": 20, "High": 25}[ev_level], step=1, key="ev_c")
 
-# ─── Render ───────────────────────────────────────────────────────────────────
-render_brand_bar()
-render_step_tiles(st.session_state.step, st.session_state.completed)
+    st.markdown('<div class="sub-head">☀️ Solar Adoption</div>', unsafe_allow_html=True)
+    solar_level = st.selectbox("Solar", ["Low", "Base", "High"], index=1,
+                               format_func=lambda x: {"Low": "Low (100 MW)", "Base": "Base (200 MW)", "High": "High (300 MW)"}[x],
+                               label_visibility="collapsed")
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# STEP 1: Planning Horizon
-# ═══════════════════════════════════════════════════════════════════════════════
-if st.session_state.step == 1:
-    st.markdown(f'<div class="section-header">Planning Horizon</div>', unsafe_allow_html=True)
-    st.markdown("Select how far into the future to model feeder stress. The simulation generates a representative peak day at that future date.")
+    st.markdown('<div class="sub-head">🏢 Data Center</div>', unsafe_allow_html=True)
+    dc_level = st.selectbox("DC Size", ["Low", "Moderate", "High"], index=1,
+                            format_func=lambda x: {"Low": "Low (1.0 MW)", "Moderate": "Moderate (1.75 MW)", "High": "High (3.0 MW)"}[x],
+                            label_visibility="collapsed")
+    dc_timeline = st.selectbox("Connection timeline", ["6m", "12m", "18m"], index=1,
+                               format_func=lambda x: {"6m": "6 Months", "12m": "12 Months", "18m": "18 Months"}[x],
+                               label_visibility="collapsed")
 
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        horizons = {
-            "6m": ("6 Months", "Near-term operational planning"),
-            "12m": ("1 Year", "Standard annual planning cycle"),
-            "18m": ("18 Months", "Extended near-term forecast"),
-            "3yr": ("3 Years", "Medium-term capital planning"),
-            "5yr": ("5 Years", "Long-term strategic planning"),
-        }
-        selected = st.radio(
-            "Planning horizon",
-            list(horizons.keys()),
-            format_func=lambda x: f"{horizons[x][0]} — {horizons[x][1]}",
-            index=list(horizons.keys()).index(st.session_state.scenario["horizon_label"]),
-            label_visibility="collapsed",
-        )
-        st.session_state.scenario["horizon_label"] = selected
+    st.markdown('<div class="sub-head">🎯 Solution Preferences</div>', unsafe_allow_html=True)
+    st.caption("Select interventions that **must** be included in recommended solutions:")
+    filter_battery = st.checkbox("Battery Storage", key="f_bat")
+    filter_mc = st.checkbox("Managed EV Charging", key="f_mc")
+    filter_pi = st.checkbox("Phased Interconnection", key="f_pi")
+    filter_dt = st.checkbox("Demand Tariff", key="f_dt")
+    filter_tu = st.checkbox("Transformer Upgrade", key="f_tu")
 
-    with col2:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h4>Selected Horizon</h4>
-            <div class="value">{horizons[selected][0]}</div>
-            <div class="delta">{horizons[selected][1]}</div>
-        </div>
-        """, unsafe_allow_html=True)
+    st.markdown('<div class="sub-head">⚙️ Study Parameters</div>', unsafe_allow_html=True)
+    max_portfolios = st.slider("Portfolios to evaluate", 10, 120, 60, step=10)
+    max_active = st.slider("Max measures per portfolio", 1, 5, 3)
 
-        st.markdown(f"""
-        <div class="metric-card">
-            <h4>Simulation Approach</h4>
-            <div style="font-size:0.9rem; color:{PWC_GREY}; margin-top:8px;">
-                24-hour representative peak day<br>
-                Load magnitudes scaled by horizon<br>
-                Data center online if timeline ≤ horizon
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+    st.markdown("---")
+    run_btn = st.button("▶  Run Study", use_container_width=True)
 
-    st.markdown("")
-    if st.button("Next → Load Growth", key="step1_next"):
-        st.session_state.completed.add(1)
-        go_to_step(2)
-        st.rerun()
+# ─── Main Area ────────────────────────────────────────────────────────────────
+st.markdown('<div class="brand"><span class="logo">pwc</span><span class="title">FeederIQ — Agentic Distribution Planning</span></div>', unsafe_allow_html=True)
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# STEP 2: Load Growth (EV + Solar)
-# ═══════════════════════════════════════════════════════════════════════════════
-elif st.session_state.step == 2:
-    st.markdown(f'<div class="section-header">Load Growth Scenarios</div>', unsafe_allow_html=True)
-    st.markdown("Define EV charging growth and solar adoption levels. These drive the synthetic demand and generation profiles injected into the feeder model.")
+if run_btn:
+    st.session_state.running = True
+    st.session_state.study_data = None
 
-    col1, col2 = st.columns(2)
+# ── Agent Execution ───────────────────────────────────────────────────────────
+if st.session_state.running and st.session_state.study_data is None:
+    st.markdown('<div class="sec-head">Agent Execution</div>', unsafe_allow_html=True)
+    st.markdown("Each agent performs a specialized step in the planning analysis pipeline.")
 
-    with col1:
-        st.markdown("#### ⚡ EV Charging Growth")
-        ev_options = {"Low": "15% annual", "Base": "20% annual", "High": "25% annual"}
-        ev_selected = st.selectbox(
-            "EV growth rate",
-            list(ev_options.keys()),
-            format_func=lambda x: f"{x} ({ev_options[x]})",
-            index=list(ev_options.keys()).index(st.session_state.scenario["ev_level"]),
-        )
-        st.session_state.scenario["ev_level"] = ev_selected
-
-        ev_custom = st.number_input(
-            "Or enter custom annual growth %",
-            min_value=5, max_value=50, value=int(float(ev_options[ev_selected].split("%")[0])),
-            step=1, key="ev_custom_input",
-            help="Override the preset with your own growth rate"
-        )
-        st.session_state.scenario["ev_custom"] = ev_custom / 100.0
-
-        st.info("📊 **Source**: EIA Annual Energy Outlook 2024 projects 15–25% annual EV adoption growth for US utilities through 2030.")
-
-    with col2:
-        st.markdown("#### ☀️ Solar Adoption")
-        solar_options = {"Low": "100 MW regional", "Base": "200 MW regional", "High": "300 MW regional"}
-        solar_selected = st.selectbox(
-            "Solar adoption level",
-            list(solar_options.keys()),
-            format_func=lambda x: f"{x} ({solar_options[x]})",
-            index=list(solar_options.keys()).index(st.session_state.scenario["solar_level"]),
-        )
-        st.session_state.scenario["solar_level"] = solar_selected
-
-        solar_custom = st.number_input(
-            "Or enter custom regional MW",
-            min_value=50, max_value=1000, value=int(solar_options[solar_selected].split(" ")[0]),
-            step=25, key="solar_custom_input",
-            help="Override with your own MW estimate"
-        )
-        st.session_state.scenario["solar_custom"] = solar_custom
-
-        st.info("📊 **Source**: SEIA/Wood Mackenzie Q1 2024 reports 100–400 MW regional adoption rates across US distribution systems.")
-
-    st.markdown("")
-    c1, c2 = st.columns([1, 5])
-    with c1:
-        if st.button("← Back", key="step2_back"):
-            go_to_step(1)
-            st.rerun()
-    with c2:
-        if st.button("Next → Data Center", key="step2_next"):
-            st.session_state.completed.add(2)
-            go_to_step(3)
-            st.rerun()
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# STEP 3: Data Center
-# ═══════════════════════════════════════════════════════════════════════════════
-elif st.session_state.step == 3:
-    st.markdown(f'<div class="section-header">Data Center Interconnection</div>', unsafe_allow_html=True)
-    st.markdown("Model a new large-load interconnection request — a common planning challenge for US utilities seeing hyperscale demand from AI/cloud operators.")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("#### 🏢 Data Center Demand")
-        dc_options = {"Low": "1.0 MW", "Moderate": "1.75 MW", "High": "3.0 MW"}
-        dc_selected = st.selectbox(
-            "Data center size",
-            list(dc_options.keys()),
-            format_func=lambda x: f"{x} ({dc_options[x]})",
-            index=list(dc_options.keys()).index(st.session_state.scenario["dc_level"]),
-        )
-        st.session_state.scenario["dc_level"] = dc_selected
-
-        dc_custom = st.number_input(
-            "Or enter custom MW",
-            min_value=0.5, max_value=10.0, value=float(dc_options[dc_selected].split(" ")[0]),
-            step=0.25, key="dc_custom_input",
-        )
-        st.session_state.scenario["dc_custom"] = dc_custom
-
-    with col2:
-        st.markdown("#### 📅 Connection Timeline")
-        dc_timeline_options = {"6m": "6 months", "12m": "12 months", "18m": "18 months"}
-        dc_timeline = st.selectbox(
-            "When does the data center come online?",
-            list(dc_timeline_options.keys()),
-            format_func=lambda x: dc_timeline_options[x],
-            index=list(dc_timeline_options.keys()).index(st.session_state.scenario["dc_timeline_label"]),
-        )
-        st.session_state.scenario["dc_timeline_label"] = dc_timeline
-
-        st.markdown(f"""
-        <div class="metric-card">
-            <h4>Planning Context</h4>
-            <div style="font-size:0.85rem; color:{PWC_GREY}; margin-top:8px;">
-                Data center load is modeled at Bus 67<br>
-                3-phase balanced load, 0.97 power factor<br>
-                Active only if planning horizon ≥ timeline<br><br>
-                <em>US utilities received 35+ GW of data center interconnection requests in 2024 (DOE Grid Deployment Office)</em>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    # Grid map preview
-    st.markdown(f'<div class="section-header">Feeder Topology — IEEE 123-Bus Network</div>', unsafe_allow_html=True)
-    grid_fig = render_grid_map()
-    if grid_fig:
-        st.plotly_chart(grid_fig, use_container_width=True)
-    else:
-        st.warning("Bus coordinates file not found — grid map unavailable.")
-
-    c1, c2 = st.columns([1, 5])
-    with c1:
-        if st.button("← Back", key="step3_back"):
-            go_to_step(2)
-            st.rerun()
-    with c2:
-        if st.button("Next → Study Config", key="step3_next"):
-            st.session_state.completed.add(3)
-            go_to_step(4)
-            st.rerun()
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# STEP 4: Study Configuration
-# ═══════════════════════════════════════════════════════════════════════════════
-elif st.session_state.step == 4:
-    st.markdown(f'<div class="section-header">Study Configuration</div>', unsafe_allow_html=True)
-    st.markdown("Configure portfolio generation parameters. The engine evaluates combinations of interventions at varying deployment levels.")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("#### 🎛️ Portfolio Parameters")
-        max_portfolios = st.slider(
-            "Maximum portfolios to evaluate",
-            min_value=10, max_value=120, value=st.session_state.scenario["max_portfolios"], step=10,
-            help="Higher = more thorough analysis, longer runtime"
-        )
-        st.session_state.scenario["max_portfolios"] = max_portfolios
-
-        max_active = st.slider(
-            "Maximum active measures per portfolio",
-            min_value=1, max_value=5, value=st.session_state.scenario["max_active_measures"],
-            help="Limits portfolio complexity"
-        )
-        st.session_state.scenario["max_active_measures"] = max_active
-
-    with col2:
-        st.markdown("#### 📋 Intervention Types")
-        st.markdown(f"""
-        <div class="metric-card">
-            <h4>Available Interventions</h4>
-            <div style="font-size:0.88rem; color:{PWC_DARK}; margin-top:8px; line-height:1.8;">
-                🔧 <strong>Transformer Upgrade</strong> — Traditional capex<br>
-                🔋 <strong>Battery Storage</strong> — Peak shaving & deferral<br>
-                🔌 <strong>Managed EV Charging</strong> — Demand flexibility<br>
-                📐 <strong>Phased Interconnection</strong> — Staged DC connection<br>
-                💰 <strong>Demand Tariff</strong> — Price-based demand response
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        st.markdown(f"""
-        <div class="metric-card">
-            <h4>Deployment Levels</h4>
-            <div style="font-size:0.88rem; color:{PWC_DARK}; margin-top:8px; line-height:1.8;">
-                <strong>0%</strong> — Not deployed<br>
-                <strong>33%</strong> — Pilot / early adoption (EPRI Stage 1)<br>
-                <strong>66%</strong> — Moderate-scale rollout (EPRI Stage 2)<br>
-                <strong>100%</strong> — Full deployment (EPRI Stage 3)
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown("")
-    # Scenario summary
-    st.markdown(f'<div class="section-header">Scenario Summary</div>', unsafe_allow_html=True)
-    sc = st.session_state.scenario
-    summary_cols = st.columns(5)
-    labels = ["Horizon", "EV Growth", "Solar", "Data Center", "DC Timeline"]
-    values = [sc["horizon_label"], f"{sc['ev_level']}", f"{sc['solar_level']}", f"{sc['dc_level']}", sc["dc_timeline_label"]]
-    for col, label, val in zip(summary_cols, labels, values):
-        col.markdown(metric_card(label, val), unsafe_allow_html=True)
-
-    st.markdown("")
-    c1, c2 = st.columns([1, 5])
-    with c1:
-        if st.button("← Back", key="step4_back"):
-            go_to_step(3)
-            st.rerun()
-    with c2:
-        if st.button("🚀 Run FeederIQ Study", key="run_study"):
-            st.session_state.completed.add(4)
-            go_to_step(5)
-            st.rerun()
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# STEP 5: Agent Execution
-# ═══════════════════════════════════════════════════════════════════════════════
-elif st.session_state.step == 5:
-    st.markdown(f'<div class="section-header">Agent Execution Pipeline</div>', unsafe_allow_html=True)
-    st.markdown("FeederIQ agents are analyzing your scenario. Each agent handles a specialized planning task.")
-
-    # Show agent cards with progress
-    agents_info = [
-        ("🔬", "Scenario Agent", "Converting selections into numeric growth assumptions and 24-hour synthetic profiles"),
-        ("⚡", "Simulation Agent", "Running OpenDSS 24-hour power flow on IEEE 123-bus feeder model"),
-        ("🔍", "Constraint Agent", "Detecting voltage violations, line overloads, and transformer overloads"),
-        ("🌱", "NWA Agent", "Evaluating non-wires alternatives: batteries, managed charging, demand tariffs"),
-        ("🔧", "Capex Agent", "Evaluating traditional infrastructure upgrades and hybrid portfolios"),
-        ("📊", "Recommendation Agent", "Ranking all portfolios by multi-criteria weighted scoring"),
+    agents = [
+        ("🔬", "Scenario Agent", "Building 24-hour load and generation profiles from your selections"),
+        ("⚡", "Simulation Agent", "Running OpenDSS power flow across 24 hourly timesteps"),
+        ("🔍", "Constraint Agent", "Identifying voltage violations and equipment overloads"),
+        ("🌱", "NWA Agent", "Evaluating non-wires alternatives (batteries, managed charging, tariffs)"),
+        ("🔧", "Capex Agent", "Evaluating traditional infrastructure upgrade options"),
+        ("📊", "Recommendation Agent", "Scoring and ranking all candidate solutions"),
     ]
 
-    agent_placeholder = st.empty()
-    progress_bar = st.progress(0)
+    agent_container = st.empty()
+    progress = st.progress(0)
 
-    # Build API payload
-    sc = st.session_state.scenario
+    # Call API
     payload = {
-        "horizon_label": sc["horizon_label"],
-        "ev_level": sc["ev_level"],
-        "solar_level": sc["solar_level"],
-        "dc_level": sc["dc_level"],
-        "dc_timeline_label": sc["dc_timeline_label"],
-        "max_active_measures": sc["max_active_measures"],
-        "max_portfolios": sc["max_portfolios"],
+        "horizon_label": horizon, "ev_level": ev_level, "solar_level": solar_level,
+        "dc_level": dc_level, "dc_timeline_label": dc_timeline,
+        "max_active_measures": max_active, "max_portfolios": max_portfolios,
     }
 
-    # Animate agent progress while waiting for API
-    for i, (icon, name, detail) in enumerate(agents_info):
-        progress_bar.progress((i + 1) / len(agents_info))
-        cards_html = ""
-        for j, (ic, nm, dt) in enumerate(agents_info):
-            if j < i:
-                cards_html += agent_card(ic, nm, "✓ Complete", "complete")
-            elif j == i:
-                cards_html += agent_card(ic, nm, f"⏳ {dt}", "running")
+    api_done = False
+    for i, (icon, name, detail) in enumerate(agents):
+        # Animate fill
+        for pct in range(0, 101, 5):
+            progress.progress((i + pct / 100) / len(agents))
+            html = ""
+            for j, (ic, nm, dt) in enumerate(agents):
+                if j < i:
+                    html += f'<div class="agent-row done"><span class="icon">{ic}</span><div><div class="name">{nm}</div><div class="detail">✓ Complete</div></div></div>'
+                elif j == i:
+                    fill_w = pct
+                    html += f'<div class="agent-row running"><span class="icon">{ic}</span><div><div class="name">{nm}</div><div class="detail">{dt}</div><div style="margin-top:6px;height:5px;background:#EFEFEF;border-radius:3px;"><div style="height:5px;background:{C_ORANGE};border-radius:3px;width:{fill_w}%;transition:width 0.1s;"></div></div></div></div>'
+                else:
+                    html += f'<div class="agent-row"><span class="icon">{ic}</span><div><div class="name">{nm}</div><div class="detail">{dt}</div></div></div>'
+            agent_container.markdown(html, unsafe_allow_html=True)
+
+            if i == 0 and pct == 0 and not api_done:
+                try:
+                    resp = requests.post(f"{API_URL}/study", json=payload, timeout=300)
+                    resp.raise_for_status()
+                    st.session_state.study_data = resp.json()
+                    api_done = True
+                except Exception as e:
+                    st.error(f"Connection failed: {e}. Is the backend running?")
+                    st.session_state.running = False
+                    st.stop()
             else:
-                cards_html += agent_card(ic, nm, dt, "pending")
-        agent_placeholder.markdown(cards_html, unsafe_allow_html=True)
+                time.sleep(0.04)
 
-        if i == 0:
-            # Call the API on the first agent step (actual work happens here)
-            try:
-                resp = requests.post(f"{API_URL}/study", json=payload, timeout=300)
-                resp.raise_for_status()
-                st.session_state.study_data = resp.json()
-            except requests.exceptions.HTTPError as e:
-                st.error(f"Study failed: {e.response.text}")
-                st.stop()
-            except Exception as e:
-                st.error(f"Connection failed: {e}. Is the backend running on {API_URL}?")
-                st.stop()
+    # All done
+    progress.progress(1.0)
+    html = ""
+    for ic, nm, dt in agents:
+        html += f'<div class="agent-row done"><span class="icon">{ic}</span><div><div class="name">{nm}</div><div class="detail">✓ Complete</div></div></div>'
+    agent_container.markdown(html, unsafe_allow_html=True)
+    time.sleep(0.5)
+    st.session_state.running = False
+    st.rerun()
+
+# ── Results ───────────────────────────────────────────────────────────────────
+if st.session_state.study_data:
+    data = st.session_state.study_data
+
+    # Apply user filters
+    ranking = data.get("ranking", [])
+    filters = {}
+    if filter_battery:
+        filters["Battery"] = True
+    if filter_mc:
+        filters["ManagedCharging"] = True
+    if filter_pi:
+        filters["PhasedInterconnection"] = True
+    if filter_dt:
+        filters["DemandTariff"] = True
+    if filter_tu:
+        filters["TransformerUpgrade"] = True
+
+    if filters:
+        ranking = [r for r in ranking if all(r.get(k, 0) > 0 for k in filters)]
+
+    if not ranking:
+        st.warning("No portfolios match your filter criteria. Try removing some filters.")
+        st.stop()
+
+    # Top 10 dropdown
+    top10 = ranking[:10]
+    top10_names = [r["portfolio_name"] for r in top10]
+
+    # ── Tabs ──
+    tab_rec, tab_rank, tab_baseline, tab_profiles, tab_memo = st.tabs([
+        "✅ Recommendation", "📊 Rankings", "🔍 Baseline", "📈 Profiles", "📝 Memo"
+    ])
+
+    # ════════════════════════ RECOMMENDATION TAB ════════════════════════════════
+    with tab_rec:
+        st.markdown('<div class="sec-head">Recommended Solution</div>', unsafe_allow_html=True)
+
+        # Human-in-the-loop: select from top 10
+        st.markdown('<div class="sub-head">Select from Top 10 Solutions</div>', unsafe_allow_html=True)
+        st.caption("Review the top-ranked options and select your preferred solution. The system recommends #1 but you can override.")
+        selected_idx = st.selectbox("Solution", range(len(top10)),
+                                    format_func=lambda i: f"#{i+1}  —  {top10_names[i]}  (Score: {top10[i]['final_score']:.2f})",
+                                    label_visibility="collapsed")
+        selected = top10[selected_idx]
+
+        # NWA resolution badge
+        if data.get("nwa_resolved_all"):
+            st.success("Non-wires alternatives fully resolve all grid violations. No traditional capex required.")
+
+        # Selected solution card
+        st.markdown(f'''<div class="rank-card top" style="margin-top:12px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+                <div>
+                    <div class="label" style="font:600 0.72rem Arial;color:{C_GREY};text-transform:uppercase;">Selected Solution</div>
+                    <div class="rc-name" style="margin-top:4px;">{selected["portfolio_name"]}</div>
+                </div>
+                <div class="rc-score">{selected["final_score"]:.2f}</div>
+            </div>
+        </div>''', unsafe_allow_html=True)
+
+        # Score breakdown
+        st.markdown('<div class="sub-head">Score Breakdown</div>', unsafe_allow_html=True)
+
+        col_bars, col_radar = st.columns([1, 1])
+        with col_bars:
+            grid_relief = selected.get("grid_relief_score", selected.get("technical_score", 0))
+            cost_sc = selected.get("cost_score", 0)
+            speed_sc = selected.get("speed_to_value_score",
+                                    (selected.get("feasibility_score", 0) + selected.get("deployment_score", 0)) / 2)
+            esg_sc = selected.get("esg_score", 8)
+
+            st.markdown(
+                score_bar("Grid Relief (40%)", grid_relief) +
+                score_bar("Cost Efficiency (25%)", cost_sc) +
+                score_bar("Speed to Value (20%)", speed_sc) +
+                score_bar("ESG Alignment (15%)", esg_sc),
+                unsafe_allow_html=True
+            )
+            st.markdown(f'''<div class="info-box"><div class="txt">
+                <b>Grid Relief</b> → % reduction in overloads and voltage violations<br>
+                <b>Cost Efficiency</b> → Lower implementation cost relative to full capex<br>
+                <b>Speed to Value</b> → How quickly the solution can be deployed and deliver results<br>
+                <b>ESG Alignment</b> → Sustainability benefit (lower carbon, less material intensity)
+            </div></div>''', unsafe_allow_html=True)
+
+        with col_radar:
+            cats = ['Grid Relief', 'Cost', 'Speed', 'ESG']
+            vals = [grid_relief, cost_sc, speed_sc, esg_sc]
+            fig = go.Figure()
+            fig.add_trace(go.Scatterpolar(
+                r=vals + [vals[0]], theta=cats + [cats[0]],
+                fill='toself', fillcolor=f'rgba(216,86,4,0.12)',
+                line=dict(color=C_ORANGE, width=2.5), name="Selected",
+            ))
+            # Runner up
+            if len(top10) > 1:
+                runner = top10[1] if selected_idx == 0 else top10[0]
+                r_vals = [
+                    runner.get("grid_relief_score", runner.get("technical_score", 0)),
+                    runner.get("cost_score", 0),
+                    runner.get("speed_to_value_score", (runner.get("feasibility_score", 0) + runner.get("deployment_score", 0)) / 2),
+                    runner.get("esg_score", 8),
+                ]
+                fig.add_trace(go.Scatterpolar(
+                    r=r_vals + [r_vals[0]], theta=cats + [cats[0]],
+                    fill='toself', fillcolor='rgba(122,122,122,0.05)',
+                    line=dict(color=C_GREY, width=1.5, dash='dot'),
+                    name="Comparison",
+                ))
+            fig.update_layout(
+                polar=dict(radialaxis=dict(visible=True, range=[0, 10], tickfont=dict(size=9))),
+                showlegend=True, height=280, margin=dict(t=20, b=20, l=40, r=40),
+                paper_bgcolor="white", font=dict(family="Arial", size=10),
+                legend=dict(orientation="h", y=-0.1, x=0.5, xanchor="center"),
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+        # Before vs After
+        st.markdown('<div class="sub-head">Impact Assessment</div>', unsafe_allow_html=True)
+        st.caption("Comparison of grid stress before and after applying the selected solution.")
+        bs = data.get("base_summary", {})
+        impr = selected.get("technical_improvement_pct", 0)
+        after_stress = bs.get("grid_stress_score", 0) * (1 - impr / 100)
+
+        ba1, ba2, ba3 = st.columns(3)
+        ba1.markdown(card("Before", f"{bs.get('grid_stress_score', 0):.0f}", "Grid stress score (no intervention)"), unsafe_allow_html=True)
+        ba2.markdown(card("After", f"{after_stress:.0f}", f"↓ {impr:.1f}% reduction"), unsafe_allow_html=True)
+        ba3.markdown(card("Improvement", f"{impr:.1f}%", "Violation and overload reduction"), unsafe_allow_html=True)
+
+        # Hourly comparison: baseline vs selected
+        base_results = data.get("base_results", [])
+        if base_results:
+            st.markdown('<div class="sub-head">Hourly Overload Comparison</div>', unsafe_allow_html=True)
+            st.caption("Baseline violations (orange) vs estimated post-intervention (green). Reduction proportional to Grid Relief score.")
+            br_df = pd.DataFrame(base_results)
+            reduction_factor = 1 - (impr / 100)
+            fig_comp = go.Figure()
+            fig_comp.add_trace(go.Bar(x=br_df["time"], y=br_df["num_overloaded_lines"],
+                                       name="Baseline Overloads", marker_color=C_ORANGE, opacity=0.7))
+            fig_comp.add_trace(go.Bar(x=br_df["time"], y=(br_df["num_overloaded_lines"] * reduction_factor).astype(int),
+                                       name="After Intervention", marker_color=C_GREEN, opacity=0.7))
+            fig_comp.update_layout(barmode="group", height=260, margin=dict(t=10, b=30),
+                                    xaxis_title="Hour", yaxis_title="Line Overloads",
+                                    plot_bgcolor="white", paper_bgcolor="white",
+                                    legend=dict(orientation="h", y=1.05, x=0.5, xanchor="center"),
+                                    font=dict(family="Arial", size=10))
+            st.plotly_chart(fig_comp, use_container_width=True)
+
+    # ════════════════════════ RANKINGS TAB ═════════════════════════════════════
+    with tab_rank:
+        st.markdown('<div class="sec-head">Portfolio Rankings</div>', unsafe_allow_html=True)
+        st.caption("All evaluated solutions ranked by weighted multi-criteria score. Click column headers to sort by any dimension.")
+
+        # Top 3 cards
+        for idx, row in enumerate(ranking[:3]):
+            badges = ["🥇", "🥈", "🥉"]
+            cls = "rank-card top" if idx == 0 else "rank-card"
+            st.markdown(f'''<div class="{cls}">
+                <div style="display:flex;align-items:center;justify-content:space-between;">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <span style="font-size:1.2rem;">{badges[idx]}</span>
+                        <span class="rc-name">{row["portfolio_name"]}</span>
+                    </div>
+                    <span class="rc-score">{row["final_score"]:.2f}</span>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin-top:8px;">
+                    <div><span style="font:500 0.7rem Arial;color:{C_GREY};">Grid Relief</span><br><b>{row.get("technical_improvement_pct",0):.1f}%</b></div>
+                    <div><span style="font:500 0.7rem Arial;color:{C_GREY};">Cost</span><br><b>{row.get("cost_score",0):.1f}/10</b></div>
+                    <div><span style="font:500 0.7rem Arial;color:{C_GREY};">Speed</span><br><b>{row.get("speed_to_value_score", (row.get("feasibility_score",0)+row.get("deployment_score",0))/2):.1f}/10</b></div>
+                    <div><span style="font:500 0.7rem Arial;color:{C_GREY};">ESG</span><br><b>{row.get("esg_score",0):.1f}/10</b></div>
+                </div>
+            </div>''', unsafe_allow_html=True)
+
+        # Bar chart
+        if len(ranking) > 3:
+            top_n = min(10, len(ranking))
+            chart_data = ranking[:top_n]
+            fig_bar = go.Figure()
+            fig_bar.add_trace(go.Bar(
+                y=[r["portfolio_name"] for r in chart_data][::-1],
+                x=[r["final_score"] for r in chart_data][::-1],
+                orientation='h',
+                marker_color=[C_ORANGE if i == top_n-1 else C_GOLD for i in range(top_n)],
+                text=[f'{r["final_score"]:.2f}' for r in chart_data][::-1],
+                textposition='outside',
+            ))
+            fig_bar.update_layout(
+                height=max(260, top_n * 36), margin=dict(t=10, l=250, b=20),
+                xaxis_title="Score", plot_bgcolor="white", paper_bgcolor="white",
+                font=dict(family="Arial", size=10),
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+        # Data table
+        st.markdown('<div class="sub-head">Full Results Table</div>', unsafe_allow_html=True)
+        rank_df = pd.DataFrame(ranking)
+        display_cols = [c for c in ["portfolio_name", "final_score", "technical_improvement_pct",
+                                    "cost_score", "speed_to_value_score", "esg_score",
+                                    "grid_relief_score"] if c in rank_df.columns]
+        # Fallback for older field names
+        if "speed_to_value_score" not in rank_df.columns and "feasibility_score" in rank_df.columns:
+            rank_df["speed_to_value_score"] = (rank_df["feasibility_score"] + rank_df["deployment_score"]) / 2
+            display_cols = [c for c in ["portfolio_name", "final_score", "technical_improvement_pct",
+                                        "cost_score", "speed_to_value_score", "esg_score"] if c in rank_df.columns]
+        st.dataframe(rank_df[display_cols] if display_cols else rank_df, use_container_width=True, height=350)
+
+    # ════════════════════════ BASELINE TAB ═════════════════════════════════════
+    with tab_baseline:
+        st.markdown('<div class="sec-head">Baseline Grid Assessment</div>', unsafe_allow_html=True)
+        st.caption("The feeder is simulated for 24 hours under projected future load conditions without any intervention applied.")
+
+        bs = data.get("base_summary", {})
+        c1, c2, c3, c4 = st.columns(4)
+        c1.markdown(card("Grid Stress Score", f"{bs.get('grid_stress_score',0):.0f}", "Higher → more violations"), unsafe_allow_html=True)
+        c2.markdown(card("Line Overloads", str(bs.get('total_line_overloads', 0)), "Total across 24 hours"), unsafe_allow_html=True)
+        c3.markdown(card("Transformer Overloads", str(bs.get('total_transformer_overloads', 0)), "Total across 24 hours"), unsafe_allow_html=True)
+        c4.markdown(card("Undervoltage Events", str(bs.get('total_undervoltage_buses', 0)), "Below 0.95 per-unit"), unsafe_allow_html=True)
+
+        c5, c6, c7, c8 = st.columns(4)
+        c5.markdown(card("Min Voltage", f"{bs.get('worst_vmin',0):.4f} pu", "Worst hour"), unsafe_allow_html=True)
+        c6.markdown(card("Max Voltage", f"{bs.get('worst_vmax',0):.4f} pu", "Worst hour"), unsafe_allow_html=True)
+        c7.markdown(card("Overvoltage Events", str(bs.get('total_overvoltage_buses', 0)), "Above 1.05 per-unit"), unsafe_allow_html=True)
+        c8.markdown(card("Convergence Failures", str(bs.get('convergence_failures', 0)), "Non-converged hours"), unsafe_allow_html=True)
+
+        # Hourly chart
+        base_results = data.get("base_results", [])
+        if base_results:
+            st.markdown('<div class="sub-head">Hourly Violation Breakdown</div>', unsafe_allow_html=True)
+            st.caption("Stacked count of equipment overloads and voltage violations at each hour of the simulated day.")
+            br_df = pd.DataFrame(base_results)
+            fig2 = go.Figure()
+            fig2.add_trace(go.Bar(x=br_df["time"], y=br_df["num_overloaded_lines"], name="Line Overloads", marker_color=C_ORANGE))
+            fig2.add_trace(go.Bar(x=br_df["time"], y=br_df["num_overloaded_transformers"], name="Transformer Overloads", marker_color=C_GOLD))
+            fig2.add_trace(go.Bar(x=br_df["time"], y=br_df["undervoltage_buses"], name="Undervoltage", marker_color=C_RED))
+            fig2.update_layout(barmode="stack", height=280, margin=dict(t=10, b=30),
+                                xaxis_title="Hour of Day", yaxis_title="Count",
+                                plot_bgcolor="white", paper_bgcolor="white",
+                                legend=dict(orientation="h", y=1.05, x=0.5, xanchor="center"),
+                                font=dict(family="Arial", size=10))
+            st.plotly_chart(fig2, use_container_width=True)
+
+        # Grid map
+        st.markdown('<div class="sub-head">Feeder Topology</div>', unsafe_allow_html=True)
+        st.caption("IEEE 123-bus test feeder with scenario assets. Hover over nodes to see details.")
+        grid_fig = render_grid_map()
+        if grid_fig:
+            st.plotly_chart(grid_fig, use_container_width=True)
+
+    # ════════════════════════ PROFILES TAB ═════════════════════════════════════
+    with tab_profiles:
+        st.markdown('<div class="sec-head">24-Hour Load Profiles</div>', unsafe_allow_html=True)
+        st.caption("Synthetic demand and generation curves used in the simulation. Profiles are shaped by scenario selections and scaled by planning horizon.")
+
+        profiles = data.get("profiles", {})
+        if profiles:
+            fig3 = go.Figure()
+            fig3.add_trace(go.Scatter(x=profiles["time"], y=profiles["feeder_mult"],
+                                       name="Feeder Load Multiplier", line=dict(width=2.5, color=C_DARK),
+                                       fill='tozeroy', fillcolor='rgba(45,45,45,0.04)'))
+            fig3.add_trace(go.Scatter(x=profiles["time"], y=profiles["ev_mw"],
+                                       name="EV Demand (MW)", line=dict(width=2.5, color=C_ORANGE),
+                                       fill='tozeroy', fillcolor='rgba(216,86,4,0.06)'))
+            fig3.add_trace(go.Scatter(x=profiles["time"], y=profiles["solar_mw"],
+                                       name="Solar Generation (MW)", line=dict(width=2.5, color=C_GREEN, dash="dot")))
+            fig3.add_trace(go.Scatter(x=profiles["time"], y=profiles["dc_mw"],
+                                       name="Data Center (MW)", line=dict(width=2.5, color=C_RED, dash="dash")))
+            fig3.update_layout(height=320, margin=dict(t=10, b=30),
+                                xaxis_title="Hour of Day", yaxis_title="Value",
+                                plot_bgcolor="white", paper_bgcolor="white",
+                                legend=dict(orientation="h", y=1.05, x=0.5, xanchor="center"),
+                                font=dict(family="Arial", size=10))
+            st.plotly_chart(fig3, use_container_width=True)
+
+            st.markdown(f'''<div class="info-box"><div class="txt">
+                <b>Feeder Multiplier</b> scales all existing loads on the feeder (morning and evening peaks, 3% annual growth)<br><br>
+                <b>EV Demand</b> peaks between 19:00 and 22:00, reflecting residential charging patterns. Source: EIA Annual Energy Outlook 2024<br><br>
+                <b>Solar Generation</b> follows a bell curve from sunrise to sunset, reducing net demand at midday<br><br>
+                <b>Data Center</b> operates at near-constant baseload (97% utilization) representing continuous compute operations
+            </div></div>''', unsafe_allow_html=True)
+
+    # ════════════════════════ MEMO TAB ═════════════════════════════════════════
+    with tab_memo:
+        st.markdown('<div class="sec-head">Planning Decision Memo</div>', unsafe_allow_html=True)
+        memo = data.get("memo", "")
+        if memo:
+            st.markdown(memo)
         else:
-            time.sleep(0.5)
+            st.info("Decision memo content will appear here.")
 
-    # Show all complete
-    cards_html = ""
-    for ic, nm, dt in agents_info:
-        cards_html += agent_card(ic, nm, "✓ Complete", "complete")
-    agent_placeholder.markdown(cards_html, unsafe_allow_html=True)
-    progress_bar.progress(1.0)
+        # Agent log
+        st.markdown('<div class="sub-head">Agent Workflow Log</div>', unsafe_allow_html=True)
+        for cp in data.get("checkpoints", []):
+            icon = "✅" if not cp.get("requires_approval") else "⚠️"
+            step_name = cp['step'].replace('_', ' ').title()
+            st.markdown(f'''<div class="agent-row done">
+                <span class="icon">{icon}</span>
+                <div><div class="name">{step_name}</div><div class="detail">{cp["message"]}</div></div>
+            </div>''', unsafe_allow_html=True)
 
-    st.success("All agents completed successfully.")
+    # Reset
+    st.markdown("---")
+    if st.button("🔄  Start New Study"):
+        st.session_state.study_data = None
+        st.session_state.running = False
+        st.rerun()
 
-    # Show grid map during execution results
-    st.markdown(f'<div class="section-header">Feeder Under Analysis</div>', unsafe_allow_html=True)
+elif not st.session_state.running:
+    # Landing page
+    st.markdown(f'''<div class="info-box"><div class="txt" style="font-size:0.95rem;">
+        <b>FeederIQ</b> is an AI-powered planning copilot that stress-tests distribution feeders under future EV, solar, and data center growth scenarios.<br><br>
+        Configure your scenario in the sidebar and click <b>Run Study</b> to start the agentic analysis pipeline.
+    </div></div>''', unsafe_allow_html=True)
+
+    st.markdown('<div class="sub-head">How It Works</div>', unsafe_allow_html=True)
+    h1, h2, h3 = st.columns(3)
+    h1.markdown(card("Step 1", "Configure", "Select growth scenarios and solution preferences", False), unsafe_allow_html=True)
+    h2.markdown(card("Step 2", "Analyze", "6 AI agents run simulation and evaluate interventions", False), unsafe_allow_html=True)
+    h3.markdown(card("Step 3", "Decide", "Review ranked solutions with multi-criteria scoring", False), unsafe_allow_html=True)
+
+    # Show grid
+    st.markdown('<div class="sub-head">IEEE 123-Bus Test Feeder</div>', unsafe_allow_html=True)
+    st.caption("Hover over nodes to see asset details. Key buses are labeled.")
     grid_fig = render_grid_map()
     if grid_fig:
         st.plotly_chart(grid_fig, use_container_width=True)
-
-    st.markdown("")
-    if st.button("View Results →", key="step5_next"):
-        st.session_state.completed.add(5)
-        go_to_step(6)
-        st.rerun()
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# STEP 6: Results & Ranking
-# ═══════════════════════════════════════════════════════════════════════════════
-elif st.session_state.step == 6:
-    data = st.session_state.study_data
-    if not data:
-        st.warning("No study results available. Please run a study first.")
-        if st.button("← Go Back"):
-            go_to_step(1)
-            st.rerun()
-    else:
-        # ── Tabs for results sections ──
-        tab_recommendation, tab_ranking, tab_baseline, tab_profiles, tab_memo = st.tabs([
-            "✅ Recommendation", "🏆 Portfolio Ranking", "📊 Baseline Assessment",
-            "📈 Load Profiles", "📝 Decision Memo"
-        ])
-
-        # ── TAB: Recommendation ──
-        with tab_recommendation:
-            st.markdown(f'<div class="section-header">Final Recommendation</div>', unsafe_allow_html=True)
-
-            top = data.get("top_recommendation", {})
-            second = data.get("second_best", {})
-            nwa_resolved = data.get("nwa_resolved_all", False)
-
-            if nwa_resolved:
-                st.markdown(f"""
-                <div style="background:{PWC_GREEN}22; border:2px solid {PWC_GREEN}; border-radius:10px; padding:16px 20px; margin-bottom:16px;">
-                    <strong style="color:{PWC_GREEN}; font-size:1.1rem;">✅ Non-Wires Alternatives Fully Resolve All Violations</strong><br>
-                    <span style="color:{PWC_GREY};">No traditional capex (transformer upgrades, reconductoring) is required.</span>
-                </div>
-                """, unsafe_allow_html=True)
-
-            if top:
-                st.markdown(f"""
-                <div class="portfolio-card top">
-                    <div style="display:flex; align-items:center; gap:12px; margin-bottom:16px;">
-                        <span style="font-size:1.5rem;">🏆</span>
-                        <div>
-                            <div style="font-size:0.8rem; color:{PWC_GREY}; text-transform:uppercase; letter-spacing:0.5px;">Top Recommendation</div>
-                            <div style="font-size:1.4rem; font-weight:800; color:{PWC_DARK};">{top.get('portfolio_name', 'N/A')}</div>
-                        </div>
-                        <span style="margin-left:auto; font-size:2rem; font-weight:900; color:{PWC_ORANGE};">{top.get('final_score', 0):.2f}</span>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-                # Score breakdown
-                st.markdown("#### Score Breakdown")
-                sc1, sc2 = st.columns([1, 1])
-                with sc1:
-                    tech_val = min(10, top.get("technical_improvement_pct", 0) / 10)
-                    st.markdown(
-                        score_bar("Technical Effectiveness (40%)", tech_val) +
-                        score_bar("Cost Attractiveness (25%)", top.get("cost_score", 0)) +
-                        score_bar("Feasibility (20%)", top.get("feasibility_score", 0)) +
-                        score_bar("Deployment Speed (15%)", top.get("deployment_score", 0)),
-                        unsafe_allow_html=True
-                    )
-                with sc2:
-                    # Radar chart
-                    categories = ['Technical', 'Cost', 'Feasibility', 'Deployment']
-                    values_top = [
-                        min(10, top.get("technical_improvement_pct", 0) / 10),
-                        top.get("cost_score", 0),
-                        top.get("feasibility_score", 0),
-                        top.get("deployment_score", 0),
-                    ]
-                    fig = go.Figure()
-                    fig.add_trace(go.Scatterpolar(
-                        r=values_top + [values_top[0]],
-                        theta=categories + [categories[0]],
-                        fill='toself',
-                        fillcolor=f'rgba(208,74,2,0.15)',
-                        line=dict(color=PWC_ORANGE, width=2),
-                        name=top.get('portfolio_name', 'Top'),
-                    ))
-                    if second:
-                        values_second = [
-                            min(10, second.get("technical_improvement_pct", 0) / 10),
-                            second.get("cost_score", 0),
-                            second.get("feasibility_score", 0),
-                            second.get("deployment_score", 0),
-                        ]
-                        fig.add_trace(go.Scatterpolar(
-                            r=values_second + [values_second[0]],
-                            theta=categories + [categories[0]],
-                            fill='toself',
-                            fillcolor='rgba(107,107,107,0.08)',
-                            line=dict(color=PWC_GREY, width=1.5, dash='dot'),
-                            name=second.get('portfolio_name', 'Runner-up'),
-                        ))
-                    fig.update_layout(
-                        polar=dict(radialaxis=dict(visible=True, range=[0, 10])),
-                        showlegend=True, height=300,
-                        margin=dict(t=30, b=30),
-                        paper_bgcolor="white",
-                        font=dict(family="Arial", size=11),
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-
-            # Before / After
-            if top:
-                st.markdown("#### Before vs. After")
-                ba1, ba2 = st.columns(2)
-                bs = data.get("base_summary", {})
-                impr = top.get("technical_improvement_pct", 0)
-                after_stress = bs.get("grid_stress_score", 0) * (1 - impr / 100)
-
-                with ba1:
-                    st.markdown(f"""
-                    <div class="metric-card" style="border-left-color:{PWC_RED};">
-                        <h4>Before (No Intervention)</h4>
-                        <div class="value">{bs.get('grid_stress_score', 0):.0f}</div>
-                        <div style="color:{PWC_GREY}; font-size:0.85rem;">Grid Stress Score</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-                with ba2:
-                    st.markdown(f"""
-                    <div class="metric-card" style="border-left-color:{PWC_GREEN};">
-                        <h4>After ({top.get('portfolio_name', '')})</h4>
-                        <div class="value">{after_stress:.0f}</div>
-                        <div class="delta">↓ {impr:.1f}% stress reduction</div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-            if second:
-                st.markdown("#### Runner-Up Option")
-                st.markdown(f"""
-                <div class="portfolio-card">
-                    <div style="display:flex; align-items:center; gap:12px;">
-                        <span style="font-size:1.2rem;">🥈</span>
-                        <div>
-                            <div style="font-weight:700; color:{PWC_DARK};">{second.get('portfolio_name', 'N/A')}</div>
-                            <div style="color:{PWC_GREY}; font-size:0.85rem;">
-                                Score: {second.get('final_score', 0):.2f} |
-                                Technical: {second.get('technical_improvement_pct', 0):.1f}% |
-                                Cost: {second.get('cost_score', 0):.1f}/10
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-        # ── TAB: Portfolio Ranking ──
-        with tab_ranking:
-            st.markdown(f'<div class="section-header">Portfolio Ranking</div>', unsafe_allow_html=True)
-            st.markdown("All evaluated portfolios ranked by weighted multi-criteria score. Click column headers to sort by any dimension.")
-
-            ranking = data.get("ranking", [])
-            if ranking:
-                rank_df = pd.DataFrame(ranking)
-
-                # Top 3 as cards
-                for idx, row in rank_df.head(3).iterrows():
-                    is_top = idx == 0
-                    card_class = "portfolio-card top" if is_top else "portfolio-card"
-                    badge = "🥇" if idx == 0 else ("🥈" if idx == 1 else "🥉")
-
-                    st.markdown(f"""
-                    <div class="{card_class}">
-                        <div style="display:flex; align-items:center; gap:16px; margin-bottom:10px;">
-                            <span class="rank">{badge} #{idx+1}</span>
-                            <span class="name">{row.get('portfolio_name', 'N/A')}</span>
-                            <span style="margin-left:auto; font-size:1.3rem; font-weight:800; color:{PWC_ORANGE};">{row.get('final_score', 0):.2f}</span>
-                        </div>
-                        <div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:12px;">
-                            <div><span style="font-size:0.75rem; color:{PWC_GREY};">Technical</span><br><strong>{row.get('technical_improvement_pct', 0):.1f}%</strong></div>
-                            <div><span style="font-size:0.75rem; color:{PWC_GREY};">Cost Score</span><br><strong>{row.get('cost_score', 0):.1f}/10</strong></div>
-                            <div><span style="font-size:0.75rem; color:{PWC_GREY};">Feasibility</span><br><strong>{row.get('feasibility_score', 0):.1f}/10</strong></div>
-                            <div><span style="font-size:0.75rem; color:{PWC_GREY};">Deployment</span><br><strong>{row.get('deployment_score', 0):.1f}/10</strong></div>
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-
-                # Horizontal bar chart
-                st.markdown("")
-                top_n = min(10, len(rank_df))
-                chart_df = rank_df.head(top_n).copy()
-                fig = go.Figure()
-                fig.add_trace(go.Bar(
-                    y=chart_df["portfolio_name"][::-1],
-                    x=chart_df["final_score"][::-1],
-                    orientation='h',
-                    marker_color=[PWC_ORANGE if i == top_n - 1 else PWC_ORANGE_LIGHT for i in range(top_n)],
-                    text=chart_df["final_score"][::-1].apply(lambda x: f"{x:.2f}"),
-                    textposition='outside',
-                ))
-                fig.update_layout(
-                    title=f"Top {top_n} Portfolios by Weighted Score",
-                    height=max(300, top_n * 45),
-                    xaxis_title="Final Score",
-                    yaxis_title="",
-                    plot_bgcolor="white", paper_bgcolor="white",
-                    margin=dict(t=40, l=220),
-                    font=dict(family="Arial", size=11),
-                )
-                st.plotly_chart(fig, use_container_width=True)
-
-                # Full table
-                st.markdown("#### Complete Ranking Table")
-                display_cols = [c for c in ["portfolio_name", "final_score", "technical_improvement_pct",
-                                            "cost_score", "feasibility_score", "deployment_score",
-                                            "Battery", "ManagedCharging", "PhasedInterconnection",
-                                            "DemandTariff", "TransformerUpgrade"] if c in rank_df.columns]
-                st.dataframe(rank_df[display_cols], use_container_width=True, height=400)
-
-        # ── TAB: Baseline Assessment ──
-        with tab_baseline:
-            st.markdown(f'<div class="section-header">Baseline Violation Assessment</div>', unsafe_allow_html=True)
-            st.markdown("The feeder is simulated for 24 hours under future load conditions **without** any intervention.")
-
-            bs = data.get("base_summary", {})
-            col1, col2, col3, col4 = st.columns(4)
-            col1.markdown(metric_card("Grid Stress Score", f"{bs.get('grid_stress_score', 0):.0f}", "Higher = more violations", True), unsafe_allow_html=True)
-            col2.markdown(metric_card("Line Overloads", f"{bs.get('total_line_overloads', 0)}", "Across 24 hours"), unsafe_allow_html=True)
-            col3.markdown(metric_card("Transformer Overloads", f"{bs.get('total_transformer_overloads', 0)}", "Across 24 hours"), unsafe_allow_html=True)
-            col4.markdown(metric_card("Undervoltage Events", f"{bs.get('total_undervoltage_buses', 0)}", f"Threshold: < 0.95 pu"), unsafe_allow_html=True)
-
-            # Additional metrics
-            st.markdown("")
-            vc1, vc2, vc3, vc4 = st.columns(4)
-            vc1.markdown(metric_card("Worst Min Voltage", f"{bs.get('worst_vmin', 0):.4f} pu"), unsafe_allow_html=True)
-            vc2.markdown(metric_card("Worst Max Voltage", f"{bs.get('worst_vmax', 0):.4f} pu"), unsafe_allow_html=True)
-            vc3.markdown(metric_card("Overvoltage Events", f"{bs.get('total_overvoltage_buses', 0)}"), unsafe_allow_html=True)
-            vc4.markdown(metric_card("Convergence Failures", f"{bs.get('convergence_failures', 0)}"), unsafe_allow_html=True)
-
-            # Hourly violations chart
-            base_results = data.get("base_results", [])
-            if base_results:
-                st.markdown("")
-                br_df = pd.DataFrame(base_results)
-                fig = go.Figure()
-                fig.add_trace(go.Bar(x=br_df["time"], y=br_df["num_overloaded_lines"], name="Line Overloads", marker_color=PWC_ORANGE))
-                fig.add_trace(go.Bar(x=br_df["time"], y=br_df["num_overloaded_transformers"], name="Transformer Overloads", marker_color=PWC_ORANGE_LIGHT))
-                fig.add_trace(go.Bar(x=br_df["time"], y=br_df["undervoltage_buses"], name="Undervoltage Buses", marker_color=PWC_RED))
-                fig.update_layout(
-                    barmode="stack", height=320,
-                    title="Hourly Violation Count (Baseline — No Intervention)",
-                    xaxis_title="Hour of Day", yaxis_title="Violation Count",
-                    plot_bgcolor="white", paper_bgcolor="white",
-                    margin=dict(t=40, b=40),
-                    font=dict(family="Arial", size=11),
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
-                )
-                st.plotly_chart(fig, use_container_width=True)
-
-            # Grid map
-            st.markdown(f'<div class="section-header">Feeder Topology with Scenario Assets</div>', unsafe_allow_html=True)
-            grid_fig = render_grid_map()
-            if grid_fig:
-                st.plotly_chart(grid_fig, use_container_width=True)
-
-        # ── TAB: Load Profiles ──
-        with tab_profiles:
-            st.markdown(f'<div class="section-header">24-Hour Synthetic Load Profiles</div>', unsafe_allow_html=True)
-            profiles = data.get("profiles", {})
-            if profiles:
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(
-                    x=profiles["time"], y=profiles["feeder_mult"],
-                    name="Feeder Load Multiplier", line=dict(width=3, color=PWC_DARK),
-                    fill='tozeroy', fillcolor='rgba(45,45,45,0.05)'
-                ))
-                fig.add_trace(go.Scatter(
-                    x=profiles["time"], y=profiles["ev_mw"],
-                    name="EV Demand (MW)", line=dict(width=3, color=PWC_ORANGE),
-                    fill='tozeroy', fillcolor='rgba(208,74,2,0.08)'
-                ))
-                fig.add_trace(go.Scatter(
-                    x=profiles["time"], y=profiles["solar_mw"],
-                    name="Solar Generation (MW)", line=dict(width=3, color=PWC_GREEN, dash="dot"),
-                ))
-                fig.add_trace(go.Scatter(
-                    x=profiles["time"], y=profiles["dc_mw"],
-                    name="Data Center (MW)", line=dict(width=3, color=PWC_RED, dash="dash"),
-                ))
-                fig.update_layout(
-                    height=380,
-                    xaxis_title="Hour of Day",
-                    yaxis_title="Value",
-                    plot_bgcolor="white", paper_bgcolor="white",
-                    margin=dict(t=20, b=40),
-                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
-                    font=dict(family="Arial", size=11),
-                )
-                st.plotly_chart(fig, use_container_width=True)
-
-                # Profile interpretation
-                st.markdown(f"""
-                <div class="metric-card">
-                    <h4>Profile Interpretation</h4>
-                    <div style="font-size:0.88rem; color:{PWC_GREY}; margin-top:8px; line-height:1.7;">
-                        • <strong>Feeder multiplier</strong> — Scales all existing loads (morning + evening peaks, 3% annual growth)<br>
-                        • <strong>EV demand</strong> — Peaks 19:00–22:00 reflecting residential charging patterns (EIA AEO 2024)<br>
-                        • <strong>Solar generation</strong> — Bell curve sunrise–sunset, reduces net demand at midday<br>
-                        • <strong>Data center</strong> — Near-flat baseload (97% utilization) representing continuous compute
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-        # ── TAB: Decision Memo ──
-        with tab_memo:
-            st.markdown(f'<div class="section-header">Decision Memo</div>', unsafe_allow_html=True)
-            memo = data.get("memo", "")
-            if memo:
-                st.markdown(memo)
-            else:
-                st.info("Decision memo will appear here after the study completes.")
-
-            # Agent workflow summary
-            st.markdown(f'<div class="section-header">Agent Workflow Log</div>', unsafe_allow_html=True)
-            for cp in data.get("checkpoints", []):
-                icon = "✅" if not cp.get("requires_approval") else "⚠️"
-                step_name = cp['step'].replace('_', ' ').title()
-                st.markdown(f"""
-                <div class="agent-card complete">
-                    <div class="agent-icon">{icon}</div>
-                    <div>
-                        <div class="agent-name">{step_name}</div>
-                        <div class="agent-detail">{cp['message']}</div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-        # Reset button
-        st.markdown("---")
-        if st.button("🔄 Start New Study", key="reset"):
-            st.session_state.step = 1
-            st.session_state.completed = set()
-            st.session_state.study_data = None
-            st.rerun()

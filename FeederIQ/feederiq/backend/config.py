@@ -23,7 +23,7 @@ BUS_PHASE_MAP_EV = {"60": ".1", "83": ".1", "90": ".2", "92": ".3", "114": ".1"}
 BUS_PHASE_MAP_SOLAR = {"66": ".1", "80": ".1", "92": ".3", "104": ".3", "110": ".1"}
 
 # Scenario options
-PLANNING_HORIZONS = {"6m": 0.5, "12m": 1.0, "18m": 1.5, "3yr": 3.0, "5yr": 5.0}
+PLANNING_HORIZONS = {"3m": 0.25, "6m": 0.5, "12m": 1.0, "18m": 1.5, "3yr": 3.0, "5yr": 5.0}
 EV_GROWTH = {"Low": 0.15, "Base": 0.20, "High": 0.25}
 SOLAR_ADOPTION = {"Low": 100, "Base": 200, "High": 300}
 DATA_CENTER_MW = {"Low": 1.0, "Moderate": 1.75, "High": 3.0}
@@ -36,6 +36,18 @@ INTERVENTION_KEYS = [
     "PhasedInterconnection", "DemandTariff"
 ]
 LEVELS = [0, 33, 66, 100]
+
+# Human-friendly level labels
+LEVEL_LABELS = {0: "None", 33: "Pilot", 66: "Scaled", 100: "Full"}
+
+# Human-friendly intervention labels
+INTERVENTION_LABELS = {
+    "TransformerUpgrade": "Transformer Upgrade",
+    "Battery": "Battery Storage",
+    "ManagedCharging": "Managed EV Charging",
+    "PhasedInterconnection": "Phased Interconnection",
+    "DemandTariff": "Demand Tariff",
+}
 
 COST_BY_LEVEL = {
     "TransformerUpgrade": {0: 0, 33: 3, 66: 6, 100: 9},
@@ -58,11 +70,24 @@ DEPLOYMENT_BY_LEVEL = {
     "PhasedInterconnection": {0: 10, 33: 8, 66: 7, 100: 6},
     "DemandTariff": {0: 10, 33: 8, 66: 7, 100: 6},
 }
+# ESG Alignment: software/behavioral solutions score highest, physical infra lowest
+ESG_BY_LEVEL = {
+    "TransformerUpgrade": {0: 10, 33: 7, 66: 5, 100: 3},
+    "Battery": {0: 10, 33: 8, 66: 7, 100: 6},
+    "ManagedCharging": {0: 10, 33: 9, 66: 9, 100: 9},
+    "PhasedInterconnection": {0: 10, 33: 9, 66: 8, 100: 7},
+    "DemandTariff": {0: 10, 33: 9, 66: 9, 100: 9},
+}
 
-# Scoring weights
+# Scoring weights (4 dimensions)
+# Grid Relief = technical violation reduction
+# Cost Efficiency = lower cost is better
+# Speed to Value = merged feasibility + deployment speed
+# ESG Alignment = sustainability / carbon benefit
 SCORING_WEIGHTS = {
     "technical": 0.40,
     "cost": 0.25,
-    "feasibility": 0.20,
-    "deployment": 0.15,
+    "speed_to_value": 0.20,
+    "esg": 0.15,
 }
+
