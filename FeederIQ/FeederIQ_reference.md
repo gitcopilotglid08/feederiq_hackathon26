@@ -24,7 +24,9 @@ Traditional feeder planning is often static, siloed, and periodic. Utilities may
 
 The planning question FeederIQ addresses is:
 
-> Where will the feeder break under future scenarios, and what is the cheapest defensible fix that still satisfies reliability constraints?
+> Where will the feeder break under future scenarios, and what is the best defensible fix — balancing technical effectiveness, cost, feasibility, and deployment speed — that still satisfies reliability constraints?
+
+The system does **not** simply recommend the cheapest option. It uses multi-criteria weighted scoring so planners can evaluate trade-offs across dimensions and select based on their operational priority (e.g., fastest to deploy, most technically effective, or lowest cost).
 
 ## 3. MVP Objective
 
@@ -329,13 +331,14 @@ This creates a ranked decision set rather than a single deterministic answer.
 
 Each portfolio should be scored using weighted criteria:
 
-| Criterion | Purpose |
-|---|---|
-| Technical improvement | Measures reduction in violations and system stress |
-| Cost attractiveness | Rewards lower-cost options |
-| Feasibility | Rewards implementable and operationally realistic options |
-| Deployment speed | Rewards faster-to-deploy interventions |
-| Reliability compliance | Penalizes unresolved violations |
+| Criterion | Weight | Purpose |
+|---|---|---|
+| Technical improvement | 40% | Measures reduction in violations and system stress |
+| Cost attractiveness | 25% | Rewards lower-cost options |
+| Feasibility | 20% | Rewards implementable and operationally realistic options |
+| Deployment speed | 15% | Rewards faster-to-deploy interventions |
+
+**Key design decision**: The system exposes all dimension scores in the ranking table, allowing planners to sort/filter by any criterion — not just the weighted total. This means a planner who prioritizes speed can pick the fastest-to-deploy option even if it's not the overall highest-scoring portfolio.
 
 Example scoring formula:
 
@@ -534,6 +537,23 @@ The simulation and scoring logic should be stable before investing heavily in UI
 - Compare flexibility options before defaulting to wires upgrades.
 - Make scoring weights configurable.
 - Store each run's inputs and outputs for reproducibility.
+- Ground all assumptions in published industry benchmarks (DOE, EPRI, NREL, EIA).
+- Align scoring framework with US regulatory methodologies (CPUC IRP, NY REV BCA).
+- Expose all scoring dimensions to support multi-criteria decision-making.
+
+## 20a. Assumptions Defensibility
+
+All model assumptions are documented and defensible:
+
+- **Deployment levels** (0/33/66/100%) map to EPRI technology maturity stages.
+- **Cost scores** derived from NREL ATB 2024, Lazard LCOE+ v17.0, and FERC Form 1 filings.
+- **Feasibility scores** based on PUC proceeding timelines and utility implementation experience.
+- **Deployment speed** sourced from DOE NWA case studies and utility IRP data.
+- **Scoring weights** aligned with CPUC IRP (D.22-02-004) and NY REV BCA Handbook (2024).
+- **Voltage thresholds** follow ANSI C84.1 Range A.
+- **Overload criteria** follow IEEE C57.91.
+
+Full details: see `assumptions_rationale.md`
 
 ## 21. One-Line MVP Description
 

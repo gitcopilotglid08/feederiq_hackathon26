@@ -82,6 +82,7 @@ vaibhav/
 ├── run_frontend.py             # Launch Streamlit frontend (:8501)
 ├── project_tracker.md          # This file
 ├── FeederIQ_reference.md       # Full project spec and architecture
+├── assumptions_rationale.md    # Market-backed defensibility of all assumptions
 ├── README.md                   # How to run the app
 ├── requirements.txt            # Python deps (fastapi, langgraph, streamlit, etc.)
 ├── feederiq/                   # Main application package
@@ -106,7 +107,8 @@ vaibhav/
 │   │       ├── profiles.py      # generate_profiles() with synthetic curves
 │   │       └── portfolios.py    # generate_portfolios(), apply_portfolio, score_portfolio
 │   └── frontend/
-│       └── app.py              # Streamlit UI (all scenario options, charts, table, memo)
+│       ├── app.py              # Streamlit UI – PwC-branded wizard (R2 redesign)
+│       └── app_v1.py           # Original sidebar-style UI (R1 reference)
 ├── ai_synthetic_data/
 │   ├── master.dss              # Original full master (heavy, for reference)
 │   ├── master_lite.dss         # Optimized master (used by app)
@@ -117,7 +119,7 @@ vaibhav/
 │   ├── IEEE123PvShapes.dss     # PV irradiance shapes (not used by master_lite)
 │   ├── IEEE123Regulators.dss   # Voltage regulators
 │   ├── IEEELinecodes.dss       # Line impedance codes
-│   ├── Buscoords.dss           # Bus coordinates for plotting
+│   ├── Buscoords.dss           # Bus coordinates for grid topology map
 │   └── profiles/
 │       ├── load_profiles/      # 91 CSVs (35040 pts each)
 │       └── pv_profiles/        # 14 PV CSVs + temperature.csv
@@ -144,9 +146,19 @@ vaibhav/
 
 ---
 
-## NWA-First Decision Logic
+## Multi-Criteria Selection Logic
 
-The scoring framework inherently favors NWA because:
+The system does **not** recommend solely based on cost. It uses a multi-criteria weighted scoring framework:
+- **Technical improvement (40%)** — % reduction in grid stress score
+- **Cost attractiveness (25%)** — lower cost = higher score
+- **Feasibility (20%)** — regulatory/political/operational ease
+- **Deployment speed (15%)** — how fast the solution can be deployed
+
+All dimension scores are exposed in the ranking table. Planners can select based on their operational priority (e.g., fastest deployment, highest technical improvement, or lowest cost) — not only the weighted total.
+
+### NWA Bias
+
+The framework inherently favors NWA because:
 - NWA options (ManagedCharging, DemandTariff, PhasedInterconnection, Battery) have lower cost scores and higher feasibility/deployment scores than TransformerUpgrade.
 - Pure capex (TransformerUpgrade at 66–100%) is penalized on cost, feasibility, and deployment speed.
 - Mixed portfolios are generated but NWA-only solutions rank higher when they resolve violations.
@@ -169,8 +181,12 @@ The scoring framework inherently favors NWA because:
 - [x] Implement agent orchestration layer (6 agents + LangGraph orchestrator).
 - [x] Add LangGraph human-in-the-loop checkpoints (interrupt_after constraint + NWA).
 - [x] End-to-end validation: API returns stress=3490, top=PhasedInterconnection:66, score=6.854, 4 checkpoints.
+- [x] Redesign frontend: PwC-branded wizard UI with tile navigation, agent visualization, grid map.
+- [x] Add feeder topology visualization (Buscoords.dss + Plotly scatter map).
+- [x] Create defensible assumptions rationale document with market benchmarks (assumptions_rationale.md).
+- [x] Add custom numeric input alongside Low/Base/High presets.
+- [x] Multi-criteria ranking UI: radar charts, score bars, portfolio cards.
 - [ ] Add LLM-powered narrative memo generation (requires OpenAI/Anthropic API key).
-- [ ] Add before/after feeder map visualization (Buscoords.dss + networkx).
 - [ ] Deploy to cloud / containerize.
 
 ---
@@ -193,11 +209,41 @@ LangGraph `interrupt_after=["constraint", "nwa"]` pauses execution at two key po
 
 In auto-approve mode (API default), the orchestrator resumes automatically through all interrupts.
 
+### Frontend Architecture (R2 Redesign)
+
+Wizard-style UI with PwC branding:
+- **Step 1**: Planning Horizon (radio selector with descriptions)
+- **Step 2**: Load Growth (EV + Solar with Low/Base/High + custom numeric input)
+- **Step 3**: Data Center (size + timeline + feeder topology map)
+- **Step 4**: Study Configuration (portfolio params + scenario summary cards)
+- **Step 5**: Agent Execution (animated agent cards showing pipeline progress)
+- **Step 6**: Results (tabbed: Recommendation, Ranking, Baseline, Profiles, Memo)
+
+Design:
+- PwC orange (#D04A02) active tiles, pale orange completed, grey/white pending
+- Light backgrounds throughout
+- Radar charts for multi-criteria comparison
+- Score bars for dimension breakdown
+- Top-3 portfolio cards with badges
+- IEEE 123-bus grid map (Plotly from Buscoords.dss)
+
+### Assumptions Defensibility
+
+See `assumptions_rationale.md` for full market-backed justification of:
+- Deployment levels (EPRI maturity stages)
+- Cost scores (NREL ATB 2024, Lazard LCOE+, FERC Form 1)
+- Feasibility scores (PUC proceeding timelines)
+- Deployment speed (DOE NWA case studies)
+- Scoring weights (aligned with CPUC IRP and NY REV BCA frameworks)
+
 ### FastAPI Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/health` | Health check |
+| GET | `/options` | Scenario options for UI |
+| POST | `/study` | Run full planning study |
+| GET | `/study/{id}` | Retrieve previous study |
 | GET | `/options` | All available scenario options for frontend dropdowns |
 | POST | `/study` | Run full study (returns results synchronously) |
 | GET | `/study/{id}` | Retrieve previously computed study by ID |

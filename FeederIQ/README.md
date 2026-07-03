@@ -7,40 +7,68 @@ An AI-powered planning copilot that forecasts feeder congestion under load-growt
 ### Prerequisites
 
 - Python 3.12+
-- Windows (OpenDSS engine is Windows-native)
-- Virtual environment at `.venv/`
+- OpenDSS engine (via `opendssdirect.py` — works on Windows, Linux, macOS)
 
-### Install Dependencies
+---
+
+### Option A: GitHub Codespaces / Dev Container
+
+When running in a Codespace or dev container, the workspace root is `/workspaces/feederiq_hackathon26`. You must `cd` into the `FeederIQ/` directory first.
+
+```bash
+cd /workspaces/feederiq_hackathon26/FeederIQ
+pip install -r requirements.txt
+```
+
+**Run the Backend:**
+
+```bash
+cd /workspaces/feederiq_hackathon26/FeederIQ
+python run_backend.py
+```
+
+**Run the Frontend** (separate terminal):
+
+```bash
+cd /workspaces/feederiq_hackathon26/FeederIQ
+python run_frontend.py
+```
+
+- Backend: **http://localhost:8000**
+- Frontend: **http://localhost:8501**
+
+> In Codespaces, use the **Ports** tab to open forwarded URLs in your browser.
+
+---
+
+### Option B: Local VS Code (Windows)
+
+When running locally, open the `FeederIQ/` folder directly in VS Code. Use a virtual environment at `.venv/`.
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### Run the Backend (FastAPI)
-
-Before starting the backend, kill any previous session occupying port 8000 to avoid `[WinError 10013]`:
+Before starting the backend, kill any previous session occupying port 8000:
 
 ```powershell
 Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue }
 ```
 
-Then start the server:
+**Run the Backend:**
 
 ```bash
 python run_backend.py
 ```
 
-This starts the API server at **http://localhost:8000**.
-
-### Run the Frontend (Streamlit)
-
-In a separate terminal:
+**Run the Frontend** (separate terminal):
 
 ```bash
 python run_frontend.py
 ```
 
-This opens the UI at **http://localhost:8501**.
+- Backend: **http://localhost:8000**
+- Frontend: **http://localhost:8501**
 
 ---
 
@@ -170,6 +198,8 @@ Portfolios are scored on 4 dimensions (weighted sum):
 - **Cost** (25%) – Lower cost = higher score
 - **Feasibility** (20%) – Regulatory/political ease of implementation
 - **Deployment speed** (15%) – How quickly the solution can be deployed
+
+**The system does not simply recommend the cheapest option.** All dimension scores are exposed in the ranking table, so planners can sort/filter by any single criterion and select based on their operational priority — fastest to deploy, most technically effective, lowest cost, or best overall weighted score.
 
 NWA options inherently score higher on cost, feasibility, and deployment speed.
 
