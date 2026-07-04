@@ -7,6 +7,11 @@ Setup:
   2. Configure AWS credentials: aws configure (or set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_DEFAULT_REGION)
   3. Ensure Bedrock model access is enabled in your AWS account
 
+Models:
+  - Default: amazon.nova-micro-v1:0 (available immediately, no form needed)
+  - Preferred: anthropic.claude-3-sonnet-20240229-v1:0 (requires Anthropic use-case form)
+  - Set BEDROCK_MODEL_ID env var to override
+
 If Bedrock is unavailable, agents fall back to template-based outputs (no crash).
 """
 import json
@@ -15,8 +20,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Default model - Claude 3 Sonnet (cost-efficient, not the latest high-token models)
-BEDROCK_MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "anthropic.claude-3-sonnet-20240229-v1:0")
+# Default model - Nova Micro works immediately; switch to Claude once approved
+BEDROCK_MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "amazon.nova-micro-v1:0")
 BEDROCK_REGION = os.environ.get("AWS_DEFAULT_REGION", os.environ.get("AWS_REGION", "us-east-1"))
 
 
@@ -34,6 +39,7 @@ def get_bedrock_client():
 def invoke_llm(system_prompt: str, user_message: str, max_tokens: int = 2000) -> str:
     """
     Invoke Bedrock LLM with system prompt and user message.
+    Uses Converse API (works with all Bedrock models).
     Returns the LLM response text, or empty string if unavailable.
     """
     client = get_bedrock_client()
@@ -41,23 +47,17 @@ def invoke_llm(system_prompt: str, user_message: str, max_tokens: int = 2000) ->
         return ""
 
     try:
-        body = json.dumps({
-            "anthropic_version": "bedrock-2023-05-31",
-            "max_tokens": max_tokens,
-            "system": system_prompt,
-            "messages": [{"role": "user", "content": user_message}],
-            "temperature": 0.3,
-        })
+        # Build system message
+        system_messages = [{"text": system_prompt}] if system_prompt else []
 
-        response = client.invoke_model(
+        response = client.converse(
             modelId=BEDROCK_MODEL_ID,
-            contentType="application/json",
-            accept="application/json",
-            body=body,
+            messages=[{"role": "user", "content": [{"text": user_message}]}],
+            system=system_messages,
+            inferenceConfig={"maxTokens": max_tokens, "temperature": 0.3},
         )
 
-        result = json.loads(response["body"].read())
-        return result["content"][0]["text"]
+        return response["output"]["message"]["content"][0]["text"]
 
     except Exception as e:
         logger.warning(f"Bedrock invocation failed: {e}")
@@ -70,10 +70,11 @@ def is_llm_available() -> bool:
     if client is None:
         return False
     try:
-        # Quick check - list models (lightweight call)
-        import boto3
-        bedrock = boto3.client("bedrock", region_name=BEDROCK_REGION)
-        bedrock.list_foundation_models(maxResults=1)
+        response = client.converse(
+            modelId=BEDROCK_MODEL_ID,
+            messages=[{"role": "user", "content": [{"text": "hi"}]}],
+            inferenceConfig={"maxTokens": 5},
+        )
         return True
     except Exception:
         return False
