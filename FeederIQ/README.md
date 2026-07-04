@@ -24,6 +24,14 @@ pip install -r requirements.txt
 
 **Run the Backend:**
 
+If port 8000 is already in use, kill the existing process first:
+
+```bash
+fuser -k 8000/tcp
+```
+
+Then start:
+
 ```bash
 cd /workspaces/feederiq_hackathon26/FeederIQ
 python scripts/run_backend.py
