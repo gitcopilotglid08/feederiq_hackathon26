@@ -264,12 +264,23 @@ with st.sidebar:
     max_active = st.slider("measures", 1, 5, 3, label_visibility="collapsed")
 
     st.markdown(f'<div class="sidebar-section"><b>🎯 Solution Preferences</b> <span class="optional-tag">(optional)</span></div>', unsafe_allow_html=True)
-    st.caption("Lock specific interventions into all evaluated solutions:")
+    filter_mode = st.radio("Filter mode", ["Must include", "Only these"], index=0,
+                           help="'Must include': solutions contain at least the selected interventions. 'Only these': solutions contain ONLY the selected interventions.",
+                           label_visibility="collapsed", horizontal=True)
+    if filter_mode == "Must include":
+        st.caption("Solutions must include selected interventions (may also include others):")
+    else:
+        st.caption("Solutions will contain ONLY the selected interventions (nothing else):")
     filter_mc = st.checkbox("Managed EV Charging", key="f_mc")
     filter_pi = st.checkbox("Phased Interconnection", key="f_pi")
     filter_dt = st.checkbox("Demand Tariff", key="f_dt")
     filter_battery = st.checkbox("Battery Storage", key="f_bat")
     filter_tu = st.checkbox("Transformer Upgrade", key="f_tu")
+
+    st.markdown(f'<div class="sidebar-section"><b>📊 Minimum Grid Relief</b></div>', unsafe_allow_html=True)
+    min_grid_relief = st.slider("Min grid relief %", 0, 50, 10, step=5, key="min_gr",
+                                help="Exclude solutions with technical improvement below this threshold")
+    st.caption(f"Only show solutions with ≥ {min_grid_relief}% grid stress reduction")
 
     st.markdown("---")
     run_btn = st.button("▶  Run Study", use_container_width=True)
@@ -362,6 +373,30 @@ if st.session_state.study_data:
     data = st.session_state.study_data
     ranking = data.get("ranking", [])
 
+    # Apply minimum grid relief filter
+    if min_grid_relief > 0:
+        ranking = [r for r in ranking if r.get("technical_improvement_pct", 0) >= min_grid_relief]
+    if not ranking:
+        st.warning("No solutions meet the minimum grid relief threshold. Try lowering the threshold or adjusting scenario parameters.")
+        ranking = data.get("ranking", [])  # fallback to unfiltered
+
+    # Apply "Only these" filter if selected
+    if filter_mode == "Only these":
+        allowed = set()
+        if filter_mc: allowed.add("ManagedCharging")
+        if filter_pi: allowed.add("PhasedInterconnection")
+        if filter_dt: allowed.add("DemandTariff")
+        if filter_battery: allowed.add("Battery")
+        if filter_tu: allowed.add("TransformerUpgrade")
+        if allowed:
+            all_keys = {"ManagedCharging", "PhasedInterconnection", "DemandTariff", "Battery", "TransformerUpgrade"}
+            excluded = all_keys - allowed
+            filtered = [r for r in ranking if all(r.get(k, 0) == 0 for k in excluded)]
+            if filtered:
+                ranking = filtered
+            else:
+                st.info("No solutions use only the selected interventions. Showing all results.")
+
     # Tabs
     tab_rec, tab_rank, tab_baseline, tab_profiles, tab_memo = st.tabs([
         "✅ Recommendation", "📊 Rankings", "🔍 Baseline", "📈 Profiles", "📝 Memo"])
@@ -370,7 +405,7 @@ if st.session_state.study_data:
     with tab_rec:
         # Score scale graphic above recommendation
         st.markdown(f'''<div style="background:#F5F5F5;border-radius:6px;padding:10px 16px;margin-bottom:14px;">
-            <div style="font:600 0.78rem Arial;color:{C_DARK};margin-bottom:6px;">Score Scale (weighted across Grid Relief, Cost, Speed, and ESG)</div>
+            <div style="font:600 0.78rem Arial;color:{C_DARK};margin-bottom:6px;">Final score is a weighted sum of Grid Relief (40%), Cost Efficiency (25%), Speed to Value (20%), and ESG (15%)</div>
             <div style="display:flex;align-items:center;gap:0;height:14px;border-radius:7px;overflow:hidden;">
                 <div style="flex:1;background:#C92A2A;height:100%;"></div>
                 <div style="flex:1;background:#E06030;height:100%;"></div>
@@ -400,11 +435,23 @@ if st.session_state.study_data:
         if data.get("nwa_resolved_all"):
             st.success("✅ Non-wires alternatives fully resolve all grid violations. No traditional capex required.")
 
-        # Solution card
+        # Solution card - color score by scale position
+        score_val = selected["final_score"]
+        if score_val >= 8:
+            score_color = "#1B8C3A"
+        elif score_val >= 6:
+            score_color = "#7CB342"
+        elif score_val >= 4:
+            score_color = "#E88D14"
+        elif score_val >= 2:
+            score_color = "#E06030"
+        else:
+            score_color = "#C92A2A"
+
         st.markdown(f'''<div class="rank-card top" style="margin:10px 0;">
             <div style="display:flex;align-items:center;justify-content:space-between;">
                 <div style="font:700 1.05rem Arial,sans-serif;color:{C_DARK};">{selected["portfolio_name"]}</div>
-                <div style="font:800 1.4rem Arial,sans-serif;color:{C1};">{selected["final_score"]:.2f} <span style="font:400 0.75rem Arial;color:{C_GREY};">/ 10</span></div>
+                <div style="font:800 1.4rem Arial,sans-serif;color:{score_color};">{selected["final_score"]:.2f} <span style="font:400 0.75rem Arial;color:{C_GREY};">/ 10</span></div>
             </div>
         </div>''', unsafe_allow_html=True)
 
@@ -425,10 +472,10 @@ if st.session_state.study_data:
                 unsafe_allow_html=True)
             st.markdown(f'''<div class="info-box">
                 <div style="font:400 0.88rem Arial;color:{C_DARK};line-height:1.8;">
-                • <b style="color:{C1};">Grid Relief</b> → % reduction in equipment overloads and voltage violations<br>
-                • <b style="color:{C1};">Cost Efficiency</b> → Lower implementation cost relative to full capex alternatives<br>
-                • <b style="color:{C1};">Speed to Value</b> → Combined feasibility and deployment timeline<br>
-                • <b style="color:{C1};">ESG Alignment</b> → Sustainability benefit: lower carbon, less material intensity
+                • <b style="color:{C1};">Grid Relief</b> ‣ % Reduction in equipment overloads and voltage violations<br>
+                • <b style="color:{C1};">Cost Efficiency</b> ‣ Lower implementation cost relative to full capex alternatives<br>
+                • <b style="color:{C1};">Speed to Value</b> ‣ Combined feasibility and deployment timeline<br>
+                • <b style="color:{C1};">ESG Alignment</b> ‣ Sustainability benefit: lower carbon, less material intensity
                 </div>
                 <div style="font:italic 400 0.72rem Arial;color:{C_GREY};margin-top:6px;">*Scoring framework aligned with CPUC IRP (D.22-02-004) and NY REV BCA methodology.</div>
             </div>''', unsafe_allow_html=True)
@@ -478,7 +525,7 @@ if st.session_state.study_data:
         profiles = data.get("profiles", {})
         if base_results and profiles:
             st.markdown(f'<div class="sub-head">Hourly Overload Comparison</div>', unsafe_allow_html=True)
-            st.caption("Baseline line overloads vs estimated post-intervention reduction across 24 hours.")
+            st.caption("Baseline line overloads vs estimated post-intervention. Zero-overload hours indicate periods where solar generation offsets demand (typically midday).")
             br_df = pd.DataFrame(base_results)
 
             # Non-uniform reduction: stronger during peak hours, weaker off-peak
