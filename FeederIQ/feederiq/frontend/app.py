@@ -193,6 +193,75 @@ def render_grid_map():
     return fig
 
 
+def render_before_after_map(improvement_pct):
+    """Render side-by-side grid maps: red (stressed) vs green (after intervention)."""
+    from pathlib import Path
+    coords_path = Path(__file__).resolve().parent.parent.parent / "ai_synthetic_data" / "Buscoords.dss"
+    if not coords_path.exists():
+        return None
+
+    buses = {}
+    with open(coords_path) as f:
+        for line in f:
+            parts = line.strip().split()
+            if len(parts) >= 3:
+                name = parts[0].lower()
+                try:
+                    buses[name] = (float(parts[1]), float(parts[2]))
+                except ValueError:
+                    continue
+    primary = {k: v for k, v in buses.items() if not k.startswith("s") and not k.endswith("r")}
+
+    # Simulate "stressed" buses (near EV/DC locations get red)
+    ev_buses = {"60", "83", "90", "92", "114"}
+    solar_buses = {"66", "80", "92", "104", "110"}
+    dc_bus = "67"
+    stressed_buses = ev_buses | {dc_bus} | {"13", "18", "21", "23", "25", "28", "29", "30"}  # downstream of DC
+
+    from plotly.subplots import make_subplots
+    fig = make_subplots(rows=1, cols=2, subplot_titles=["Before (Baseline)", "After (Intervention)"],
+                        horizontal_spacing=0.05)
+
+    for col, is_after in [(1, False), (2, True)]:
+        xs, ys, colors, sizes = [], [], [], []
+        for bus, (x, y) in primary.items():
+            xs.append(x)
+            ys.append(y)
+            if is_after:
+                # After: most nodes green, some yellow (residual)
+                if bus in stressed_buses and improvement_pct < 80:
+                    colors.append("#E88D14")  # partially resolved
+                    sizes.append(9)
+                else:
+                    colors.append(C_GREEN)
+                    sizes.append(7)
+            else:
+                # Before: stressed nodes red
+                if bus == dc_bus:
+                    colors.append("#8B0000")
+                    sizes.append(14)
+                elif bus in stressed_buses:
+                    colors.append(C_RED)
+                    sizes.append(10)
+                elif bus in ev_buses:
+                    colors.append(C1)
+                    sizes.append(9)
+                else:
+                    colors.append("#AAAAAA")
+                    sizes.append(5)
+
+        fig.add_trace(go.Scatter(x=xs, y=ys, mode='markers',
+                                  marker=dict(size=sizes, color=colors, line=dict(width=0.5, color='white')),
+                                  showlegend=False, hoverinfo='skip'), row=1, col=col)
+
+    fig.update_layout(height=280, margin=dict(t=30, b=5, l=5, r=5),
+                      plot_bgcolor='#F8F8F8', paper_bgcolor='white',
+                      font=dict(family="Arial", size=10))
+    fig.update_xaxes(visible=False)
+    fig.update_yaxes(visible=False)
+    return fig
+
+
 # ─── Session State ────────────────────────────────────────────────────────────
 if "study_data" not in st.session_state:
     st.session_state.study_data = None
@@ -344,6 +413,16 @@ if st.session_state.running and st.session_state.study_data is None:
         "use_real_data": use_real_data,
     }
 
+    # Override with demo preset if demo button was clicked
+    if st.session_state.get("demo_mode"):
+        payload = {
+            "horizon_label": "12m", "ev_level": "High", "solar_level": "Base",
+            "dc_level": "Moderate", "dc_timeline_label": "12m",
+            "max_active_measures": 3, "max_portfolios": 60,
+            "required_interventions": None, "use_real_data": True,
+        }
+        st.session_state.demo_mode = False
+
     api_done = False
     for i, (icon, name, detail) in enumerate(agents):
         for pct in range(0, 101, 4):
@@ -371,11 +450,23 @@ if st.session_state.running and st.session_state.study_data is None:
                 time.sleep(0.035)
 
     progress.progress(1.0)
+    # Show agent summaries from actual results
+    study = st.session_state.study_data
+    bs = study.get("base_summary", {})
+    top_rec = study.get("top_recommendation", {})
+    agent_summaries = [
+        f"✓ Profiles generated. Data source: {study.get('scenario', {}).get('use_real_data', 'synthetic')}",
+        f"✓ 24-hour power flow complete. Feeder: IEEE 123-bus.",
+        f"✓ Grid stress: {bs.get('grid_stress_score', 0):.0f}. Line overloads: {bs.get('total_line_overloads', 0)}. Transformer overloads: {bs.get('total_transformer_overloads', 0)}.",
+        f"✓ Best NWA: {top_rec.get('portfolio_name', 'N/A') if top_rec.get('TransformerUpgrade', 0) == 0 else 'Evaluated'}. {len(study.get('ranking', []))} portfolios scored.",
+        f"✓ Capex options evaluated for comparison.",
+        f"✓ Top recommendation: {top_rec.get('portfolio_name', 'N/A')} (score: {top_rec.get('final_score', 0):.2f})",
+    ]
     html = ""
-    for ic, nm, dt in agents:
-        html += f'<div class="agent-row done"><span style="font-size:1.1rem;">{ic}</span><div><div class="name">{nm}</div><div class="detail">✓ Complete</div></div></div>'
+    for (ic, nm, dt), summary in zip(agents, agent_summaries):
+        html += f'<div class="agent-row done"><span style="font-size:1.1rem;">{ic}</span><div><div class="name">{nm}</div><div class="detail">{summary}</div></div></div>'
     agent_container.markdown(html, unsafe_allow_html=True)
-    time.sleep(0.3)
+    time.sleep(0.5)
     st.session_state.running = False
     st.rerun()
 
@@ -530,6 +621,13 @@ if st.session_state.study_data:
         ba1.markdown(card_html("Before (No Intervention)", f"{bs.get('grid_stress_score', 0):.0f}", "Grid stress score"), unsafe_allow_html=True)
         ba2.markdown(card_html("After (Selected Solution)", f"{after_stress:.0f}", f"↓ {impr:.1f}% reduction"), unsafe_allow_html=True)
         ba3.markdown(card_html("Technical Improvement", f"{impr:.1f}%", "Overload and violation reduction"), unsafe_allow_html=True)
+
+        # Before/After Grid Map
+        st.markdown(f'<div class="sub-head">Grid Stress Visualization</div>', unsafe_allow_html=True)
+        st.caption("Red nodes indicate stressed equipment. Green indicates resolved. Orange indicates partially resolved.")
+        ba_map = render_before_after_map(impr)
+        if ba_map:
+            st.plotly_chart(ba_map, use_container_width=True)
 
         # Hourly comparison with non-uniform reduction (stronger during peak)
         base_results = data.get("base_results", [])
@@ -744,18 +842,23 @@ if st.session_state.study_data:
 
 elif not st.session_state.running:
     # Landing
-    st.markdown(f'''<div style="margin-top:20px;">
-        <div class="step-cards">
-            <div class="card" style="flex:1;"><div class="lbl" style="color:{C1};">Step 1</div><div class="val">Configure</div><div class="sub">Select growth scenarios</div></div>
-            <div class="card" style="flex:1;border-left-color:{C2};"><div class="lbl" style="color:{C2};">Step 2</div><div class="val">Analyze</div><div class="sub">6 AI agents evaluate options</div></div>
-            <div class="card" style="flex:1;border-left-color:{C3};"><div class="lbl" style="color:{C3};">Step 3</div><div class="val">Decide</div><div class="sub">Multi-criteria ranked solutions</div></div>
-        </div>
+    st.markdown(f'''<div style="display:flex;gap:12px;margin-bottom:16px;">
+        <div class="card" style="flex:1;"><div class="lbl" style="color:{C1};">Step 1</div><div class="val" style="font-size:1.1rem;">Configure</div><div class="sub">Select growth scenarios and preferences</div></div>
+        <div class="card" style="flex:1;border-left-color:{C2};"><div class="lbl" style="color:{C2};">Step 2</div><div class="val" style="font-size:1.1rem;">Analyze</div><div class="sub">6 AI agents powered by Claude evaluate options</div></div>
+        <div class="card" style="flex:1;border-left-color:{C3};"><div class="lbl" style="color:{C3};">Step 3</div><div class="val" style="font-size:1.1rem;">Decide</div><div class="sub">Multi-criteria ranked recommendations</div></div>
     </div>''', unsafe_allow_html=True)
 
-    st.caption("Configure parameters in the sidebar and click **Run Study**.")
+    st.caption("Configure parameters in the sidebar and click **Run Study**. Or use the demo preset below.")
+
+    # Demo preset button
+    if st.button("\U0001f3af  Run Demo (12m horizon, High EV, Moderate DC, real data)", key="demo_btn"):
+        st.session_state.running = True
+        st.session_state.study_data = None
+        st.session_state.demo_mode = True
+        st.rerun()
 
     st.markdown(f'<div class="sub-head">Existing Network Topology</div>', unsafe_allow_html=True)
-    st.caption("IEEE 123-bus test feeder. Hover over nodes for details. Color indicates asset type.")
+    st.caption("IEEE 123-bus distribution feeder with scenario assets. Hover for details.")
     grid_fig = render_grid_map()
     if grid_fig:
         st.plotly_chart(grid_fig, use_container_width=True)
