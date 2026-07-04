@@ -249,12 +249,10 @@ with st.sidebar:
         help="Expected timeline for data center to come online."
     )
 
-    st.markdown(f'<div class="sidebar-section"><b>🕐 Peak Load Hours</b></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="sidebar-section"><b>🕐 Peak Demand Window</b></div>', unsafe_allow_html=True)
+    st.caption("System peak hours for demand tariff and managed charging application (based on US utility standard practice 5-9 PM).")
     peak_start, peak_end = st.slider("Peak hours", 0, 23, (17, 21), key="peak_hrs")
-    st.caption(f"Selected: {peak_start}:00 – {peak_end}:00")
-    # Visual peak range indicator
-    peak_bar = "░" * peak_start + "█" * (peak_end - peak_start + 1) + "░" * (23 - peak_end)
-    st.markdown(f'<div style="font:400 0.65rem monospace;color:{C_GREY};letter-spacing:1px;" title="24h peak visualization">{peak_bar}</div>', unsafe_allow_html=True)
+    st.caption(f"Peak window: {peak_start}:00 – {peak_end}:00")
 
     st.markdown("---")
     st.markdown(f'<div class="sidebar-section"><b>Candidate Portfolios to Evaluate</b></div>', unsafe_allow_html=True)
@@ -567,13 +565,16 @@ if st.session_state.study_data:
             badges = ["🥇", "🥈", "🥉"]
             cls = "rank-card top" if idx == 0 else "rank-card"
             speed_val = row.get("speed_to_value_score", (row.get("feasibility_score", 0) + row.get("deployment_score", 0)) / 2)
+            # Color score by value
+            rs = row["final_score"]
+            rs_color = C_GREEN if rs >= 8 else ("#7CB342" if rs >= 6 else (C2 if rs >= 4 else C_RED))
             st.markdown(f'''<div class="{cls}">
                 <div style="display:flex;align-items:center;justify-content:space-between;">
                     <div style="display:flex;align-items:center;gap:8px;">
                         <span style="font-size:1.1rem;">{badges[idx]}</span>
                         <span style="font:700 0.92rem Arial;color:{C_DARK};">{row["portfolio_name"]}</span>
                     </div>
-                    <span style="font:800 1.1rem Arial;color:{C1};">{row["final_score"]:.2f} / 10</span>
+                    <span style="font:800 1.1rem Arial;color:{rs_color};">{row["final_score"]:.2f} / 10</span>
                 </div>
                 <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;margin-top:6px;">
                     <div><span style="font:600 0.7rem Arial;color:{C_GREY};">Grid Relief</span><br><b style="color:{C1};">{row.get("technical_improvement_pct", 0):.1f}%</b></div>
@@ -619,6 +620,29 @@ if st.session_state.study_data:
         c2_.markdown(card_html("Line Overloads", str(bs.get('total_line_overloads', 0)), "Total across 24 hours"), unsafe_allow_html=True)
         c3_.markdown(card_html("Transformer Overloads", str(bs.get('total_transformer_overloads', 0)), "Total across 24 hours"), unsafe_allow_html=True)
         c4_.markdown(card_html("Undervoltage Events", str(bs.get('total_undervoltage_buses', 0)), "Below 0.95 per-unit"), unsafe_allow_html=True)
+
+        # Grid stress score explanation
+        stress = bs.get('grid_stress_score', 0)
+        if stress > 3000:
+            severity_txt = "Critical"
+            sev_color = C_RED
+        elif stress > 1000:
+            severity_txt = "High"
+            sev_color = C1
+        elif stress > 300:
+            severity_txt = "Moderate"
+            sev_color = C2
+        else:
+            severity_txt = "Low"
+            sev_color = C_GREEN
+        st.markdown(f'''<div class="info-box">
+            <div style="font:400 0.82rem Arial;color:{C_DARK};line-height:1.7;">
+            <b style="color:{C1};">Grid Stress Score</b> is a composite metric combining all violation types:<br>
+            <span style="color:{C_GREY};font-size:0.78rem;">Formula: 20×convergence failures + 5×line overloads + 6×transformer overloads + 2×voltage violations</span><br><br>
+            <b>Severity scale:</b> 0 (no issues) → 300 (Low) → 1000 (Moderate) → 3000 (High) → 5000+ (Critical)<br>
+            Current assessment: <b style="color:{sev_color};">{severity_txt}</b> ({stress:.0f})
+            </div>
+        </div>''', unsafe_allow_html=True)
 
         base_results = data.get("base_results", [])
         if base_results:
@@ -669,17 +693,17 @@ if st.session_state.study_data:
                 line=dict(width=2.5, color=C_RED, dash="dash")
             ))
             fig3.update_layout(
-                height=300, margin=dict(t=10, b=30),
+                height=380, margin=dict(t=50, b=30),
                 xaxis_title="Hour of Day", yaxis_title="Value",
                 plot_bgcolor="white", paper_bgcolor="white",
-                legend=dict(orientation="h", y=1.05, x=0.5, xanchor="center", font=dict(family="Arial", size=11)),
+                legend=dict(orientation="h", y=1.12, x=0.5, xanchor="center", font=dict(family="Arial", size=11)),
                 font=dict(family="Arial", size=11)
             )
             st.plotly_chart(fig3, use_container_width=True)
 
-            st.markdown(f'''<div class="info-box"><div style="font:400 0.82rem Arial;color:{C_DARK};line-height:1.8;">
+            st.markdown(f'''<div class="info-box"><div style="font:400 0.85rem Arial;color:{C_DARK};line-height:1.9;">
                 • <b style="color:{C1};">Feeder Multiplier</b> scales all existing loads (morning and evening peaks, 3% annual growth)<br>
-                • <b style="color:{C1};">EV Demand</b> peaks 19:00–22:00 reflecting residential charging patterns (EIA AEO 2024)<br>
+                • <b style="color:{C1};">EV Demand</b> peaks 19:00–22:00 based on US residential charging research. Note: The Peak Demand Window (sidebar) controls when interventions are applied, not when EV naturally peaks<br>
                 • <b style="color:{C1};">Solar Generation</b> bell curve sunrise to sunset, reduces net demand at midday (SEIA 2024)<br>
                 • <b style="color:{C1};">Data Center</b> near-constant baseload at 97% utilization (DOE Grid Deployment Office 2024)
             </div></div>''', unsafe_allow_html=True)
@@ -689,7 +713,9 @@ if st.session_state.study_data:
         st.markdown('<div class="sec-head">Planning Decision Memo</div>', unsafe_allow_html=True)
         memo = data.get("memo", "")
         if memo:
-            st.markdown(f'<div class="memo-area">{memo}</div>', unsafe_allow_html=True)
+            # Remove duplicate title since we have our own section header
+            memo_clean = memo.replace("# FeederIQ Planning Decision Memo\n", "").strip()
+            st.markdown(f'<div class="memo-area">{memo_clean}</div>', unsafe_allow_html=True)
 
         st.markdown(f'<div class="sub-head">Agent Workflow Log</div>', unsafe_allow_html=True)
         for cp in data.get("checkpoints", []):

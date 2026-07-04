@@ -181,11 +181,17 @@ The framework inherently favors NWA because:
 - [x] Implement agent orchestration layer (6 agents + LangGraph orchestrator).
 - [x] Add LangGraph human-in-the-loop checkpoints (interrupt_after constraint + NWA).
 - [x] End-to-end validation: API returns stress=3490, top=PhasedInterconnection:66, score=6.854, 4 checkpoints.
-- [x] Redesign frontend: PwC-branded wizard UI with tile navigation, agent visualization, grid map.
-- [x] Add feeder topology visualization (Buscoords.dss + Plotly scatter map).
+- [x] Redesign frontend: PwC-branded wizard UI with sidebar config, agent visualization, grid map.
+- [x] Add feeder topology visualization (Buscoords.dss + Plotly with line connections from DSS).
 - [x] Create defensible assumptions rationale document with market benchmarks (assumptions_rationale.md).
 - [x] Add custom numeric input alongside Low/Base/High presets.
 - [x] Multi-criteria ranking UI: radar charts, score bars, portfolio cards.
+- [x] Solution Preferences: "Must include" and "Only these" (exclusive) filter modes.
+- [x] Minimum Grid Relief threshold slider (default 10%, excludes weak solutions).
+- [x] Score color gradient matching scale (green=high, orange=mid, red=low).
+- [x] Grid Stress Score explanation with severity scale in baseline tab.
+- [x] Intervention levels renamed: Low/Medium/High (from Pilot/Scaled/Full).
+- [x] Fixed checkpoint messages: proper formatting, no = signs, NWA spelled out.
 - [ ] Add LLM-powered narrative memo generation (requires OpenAI/Anthropic API key).
 - [ ] Deploy to cloud / containerize.
 

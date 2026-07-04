@@ -38,7 +38,7 @@ INTERVENTION_KEYS = [
 LEVELS = [0, 33, 66, 100]
 
 # Human-friendly level labels
-LEVEL_LABELS = {0: "None", 33: "Pilot", 66: "Scaled", 100: "Full"}
+LEVEL_LABELS = {0: "None", 33: "Low", 66: "Medium", 100: "High"}
 
 # Human-friendly intervention labels
 INTERVENTION_LABELS = {

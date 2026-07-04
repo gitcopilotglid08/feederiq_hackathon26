@@ -64,11 +64,11 @@ def scenario_node(state: StudyState) -> dict:
         "assumptions": result["assumptions"],
         "checkpoints": state.get("checkpoints", []) + [{
             "step": "scenario",
-            "message": f"Scenario configured: {state['scenario']['horizon_label']} horizon, "
-                       f"EV={state['scenario']['ev_level']}, Solar={state['scenario']['solar_level']}, "
-                       f"DC={state['scenario']['dc_level']}. "
-                       f"Peak EV={result['assumptions']['peak_ev_mw']:.2f} MW, "
-                       f"Peak Solar={result['assumptions']['peak_solar_mw']:.2f} MW.",
+            "message": f"Scenario configured: {state['scenario']['horizon_label']} horizon. "
+                       f"EV growth: {state['scenario']['ev_level']}, Solar: {state['scenario']['solar_level']}, "
+                       f"Data Center: {state['scenario']['dc_level']}. "
+                       f"Peak EV demand: {result['assumptions']['peak_ev_mw']:.2f} MW. "
+                       f"Peak Solar generation: {result['assumptions']['peak_solar_mw']:.2f} MW.",
             "requires_approval": False,
         }],
     }
@@ -90,11 +90,11 @@ def constraint_node(state: StudyState) -> dict:
         "severity": analysis["severity"],
         "checkpoints": state.get("checkpoints", []) + [{
             "step": "constraint_analysis",
-            "message": f"Baseline stress score: {analysis['summary']['grid_stress_score']:.0f} "
+            "message": f"Baseline grid stress score: {analysis['summary']['grid_stress_score']:.0f} "
                        f"(severity: {analysis['severity']}). "
                        f"Violations detected: {analysis['violations_detected']}. "
-                       f"Undervoltage={analysis['summary']['total_undervoltage_buses']}, "
-                       f"Line overloads={analysis['summary']['total_line_overloads']}.",
+                       f"Undervoltage buses: {analysis['summary']['total_undervoltage_buses']}, "
+                       f"Line overloads: {analysis['summary']['total_line_overloads']}.",
             "requires_approval": True,
         }],
     }
@@ -114,9 +114,9 @@ def nwa_node(state: StudyState) -> dict:
         "nwa_scored": nwa_scored,
         "checkpoints": state.get("checkpoints", []) + [{
             "step": "nwa_evaluation",
-            "message": f"Evaluated {len(nwa_scored)} NWA portfolios. "
-                       f"Best NWA: {best_nwa_name} (score={best_nwa_score}). "
-                       f"Proceed to evaluate capex/hybrid options?",
+            "message": f"Evaluated {len(nwa_scored)} Non-Wires Alternative portfolios. "
+                       f"Best NWA option: {best_nwa_name} (score: {best_nwa_score:.2f}). "
+                       f"Evaluating capex/hybrid options for comparison.",
             "requires_approval": True,
         }],
     }
@@ -148,8 +148,8 @@ def recommendation_node(state: StudyState) -> dict:
         "checkpoints": state.get("checkpoints", []) + [{
             "step": "recommendation",
             "message": f"Study complete. Top recommendation: {result['top_recommendation']['portfolio_name']} "
-                       f"(score={result['top_recommendation']['final_score']}). "
-                       f"NWA fully resolves violations: {result['nwa_resolved_all']}.",
+                       f"(score: {result['top_recommendation']['final_score']:.2f}). "
+                       f"{'NWA fully resolves all violations.' if result['nwa_resolved_all'] else 'Residual violations remain; hybrid approach recommended.'}",
             "requires_approval": False,
         }],
     }
