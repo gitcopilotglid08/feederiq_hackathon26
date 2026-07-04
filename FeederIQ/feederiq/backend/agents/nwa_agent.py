@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from ..simulation.portfolios import generate_portfolios, score_portfolio, summarize_results
 from ..simulation.engine import run_24hr_simulation
@@ -7,16 +8,46 @@ from ..config import INTERVENTION_KEYS
 INSTRUCTIONS_PATH = Path(__file__).parent / "instructions" / "nwa_agent.md"
 
 
+def _parse_config(text: str) -> dict:
+    """Extract CONFIG yaml block from instruction markdown."""
+    config = {}
+    match = re.search(r"```yaml\n(.*?)```", text, re.DOTALL)
+    if match:
+        for line in match.group(1).strip().split("\n"):
+            if ":" in line:
+                key, val = line.split(":", 1)
+                key = key.strip()
+                val = val.strip()
+                # Parse list values
+                if val.startswith("[") and val.endswith("]"):
+                    val = [v.strip().strip('"').strip("'") for v in val[1:-1].split(",")]
+                elif val.isdigit():
+                    val = int(val)
+                config[key] = val
+    return config
+
+
 class NWAAgent:
-    """Generates and evaluates Non-Wires Alternative portfolios (no TransformerUpgrade)."""
+    """Generates and evaluates Non-Wires Alternative portfolios.
+    Behavior is driven by the instruction file at instructions/nwa_agent.md.
+    Edit the CONFIG section in that file to change which interventions are excluded."""
 
     def __init__(self):
         self.instructions = INSTRUCTIONS_PATH.read_text() if INSTRUCTIONS_PATH.exists() else ""
+        self.config = _parse_config(self.instructions)
+        # These come from the instruction file CONFIG block
+        self.exclude = self.config.get("exclude_interventions", ["TransformerUpgrade"])
+        self.max_measures = self.config.get("max_active_measures", 3)
 
     def run(self, profiles, base_summary: dict, max_portfolios: int = 30, required_interventions: list = None) -> list:
-        # Generate NWA-only portfolios (TransformerUpgrade forced to 0)
-        all_portfolios = generate_portfolios(max_active_measures=3, required_interventions=required_interventions)
-        nwa_portfolios = [p for p in all_portfolios if p["TransformerUpgrade"] == 0]
+        # Generate portfolios excluding interventions specified in instructions
+        all_portfolios = generate_portfolios(
+            max_active_measures=self.max_measures,
+            required_interventions=required_interventions
+        )
+        # Filter out excluded interventions (from instruction config)
+        nwa_portfolios = [p for p in all_portfolios
+                          if all(p.get(k, 0) == 0 for k in self.exclude)]
         nwa_portfolios = nwa_portfolios[:max_portfolios]
 
         scored = []

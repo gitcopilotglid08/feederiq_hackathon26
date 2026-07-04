@@ -50,7 +50,7 @@ INTERVENTION_LABELS = {
 }
 
 COST_BY_LEVEL = {
-    "TransformerUpgrade": {0: 0, 33: 3, 66: 6, 100: 9},
+    "TransformerUpgrade": {0: 0, 33: 5, 66: 8, 100: 10},
     "Battery": {0: 0, 33: 3, 66: 5, 100: 8},
     "ManagedCharging": {0: 0, 33: 1, 66: 2, 100: 3},
     "PhasedInterconnection": {0: 0, 33: 1, 66: 2, 100: 3},
