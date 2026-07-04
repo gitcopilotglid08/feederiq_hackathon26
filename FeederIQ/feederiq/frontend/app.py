@@ -212,6 +212,14 @@ with st.sidebar:
         help="Time horizon for the planning study. Longer horizons capture compounding growth effects."
     )
 
+    st.markdown(f'<div class="sidebar-section"><b>📂 Data Source</b></div>', unsafe_allow_html=True)
+    use_real_data = st.checkbox("Use real load profiles (DOE openEDI)", value=False, key="real_data",
+                                help="91 bus-level measured load profiles at 15-minute resolution across 365 days. Source: DOE Open Energy Data Initiative / oedisi-ieee123. The system selects the peak-stress day from the full year for analysis.")
+    if use_real_data:
+        st.caption("✓ Measurement-calibrated profiles: 91 load shapes × 35,040 data points × 15-min resolution. Source: DOE Open Energy Data Initiative (BSD-3). Peak stress day selected from full-year dataset automatically.")
+    else:
+        st.caption("Parametric synthetic profiles (math-generated 24h curves)")
+
     st.markdown(f'<div class="sidebar-section"><b>⚡ EV Growth</b></div>', unsafe_allow_html=True)
     ev_options = ["Low (15% annually)", "Base (20% annually)", "High (25% annually)", "Custom"]
     ev_choice = st.selectbox("EV Growth", ev_options, index=1, label_visibility="collapsed",
@@ -280,15 +288,7 @@ with st.sidebar:
                                 help="Exclude solutions with technical improvement below this threshold")
     st.caption(f"Only show solutions with ≥ {min_grid_relief}% grid stress reduction")
 
-    st.markdown(f'<div class="sidebar-section"><b>� Data Source</b></div>', unsafe_allow_html=True)
-    use_real_data = st.checkbox("Use real openEDI profiles", value=False, key="real_data",
-                                help="Use DOE Open Energy Data Initiative load profiles (measurement-based) instead of synthetic curves")
-    if use_real_data:
-        st.caption("Peak day from 1-year measured load profiles (91 buses)")
-    else:
-        st.caption("Synthetic 24-hour curves (math-generated)")
-
-    st.markdown(f'<div class="sidebar-section"><b>�💾 Save Results</b></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="sidebar-section"><b> Save Results</b></div>', unsafe_allow_html=True)
     save_outputs = st.checkbox("Save run outputs to disk", value=False, key="save_out",
                                help="When enabled, results are saved to outputs/ folder")
 
