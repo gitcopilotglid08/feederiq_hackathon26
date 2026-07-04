@@ -1,11 +1,17 @@
+from pathlib import Path
 from ..simulation.portfolios import generate_portfolios, score_portfolio, summarize_results
 from ..simulation.engine import run_24hr_simulation
 from ..simulation.portfolios import apply_portfolio_to_profiles, line_capacity_multiplier, transformer_capacity_multiplier
 from ..config import INTERVENTION_KEYS
 
+INSTRUCTIONS_PATH = Path(__file__).parent / "instructions" / "nwa_agent.md"
+
 
 class NWAAgent:
     """Generates and evaluates Non-Wires Alternative portfolios (no TransformerUpgrade)."""
+
+    def __init__(self):
+        self.instructions = INSTRUCTIONS_PATH.read_text() if INSTRUCTIONS_PATH.exists() else ""
 
     def run(self, profiles, base_summary: dict, max_portfolios: int = 30, required_interventions: list = None) -> list:
         # Generate NWA-only portfolios (TransformerUpgrade forced to 0)

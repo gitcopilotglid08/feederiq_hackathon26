@@ -270,10 +270,10 @@ with st.sidebar:
     else:
         st.caption("Solutions will contain ONLY the selected interventions (nothing else):")
     filter_mc = st.checkbox("Managed EV Charging", key="f_mc")
-    filter_pi = st.checkbox("Phased Interconnection", key="f_pi")
-    filter_dt = st.checkbox("Demand Tariff", key="f_dt")
+    filter_pi = st.checkbox("Staged Load Connection", key="f_pi")
+    filter_dt = st.checkbox("Dynamic Tariffs", key="f_dt")
     filter_battery = st.checkbox("Battery Storage", key="f_bat")
-    filter_tu = st.checkbox("Transformer Upgrade", key="f_tu")
+    filter_tu = st.checkbox("Capacity Upgrade", key="f_tu")
 
     st.markdown(f'<div class="sidebar-section"><b>📊 Minimum Grid Relief</b></div>', unsafe_allow_html=True)
     min_grid_relief = st.slider("Min grid relief %", 0, 50, 10, step=5, key="min_gr",

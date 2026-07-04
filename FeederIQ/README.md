@@ -26,14 +26,14 @@ pip install -r requirements.txt
 
 ```bash
 cd /workspaces/feederiq_hackathon26/FeederIQ
-python run_backend.py
+python scripts/run_backend.py
 ```
 
 **Run the Frontend** (separate terminal):
 
 ```bash
 cd /workspaces/feederiq_hackathon26/FeederIQ
-python run_frontend.py
+python scripts/run_frontend.py
 ```
 
 - Backend: **http://localhost:8000**
@@ -60,13 +60,13 @@ Get-NetTCPConnection -LocalPort 8000 -ErrorAction SilentlyContinue | ForEach-Obj
 **Run the Backend:**
 
 ```bash
-python run_backend.py
+python scripts/run_backend.py
 ```
 
 **Run the Frontend** (separate terminal):
 
 ```bash
-python run_frontend.py
+python scripts/run_frontend.py
 ```
 
 - Backend: **http://localhost:8000**

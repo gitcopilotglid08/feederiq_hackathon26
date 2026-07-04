@@ -1,10 +1,16 @@
+from pathlib import Path
 from ..simulation.portfolios import generate_portfolios, score_portfolio, summarize_results
 from ..simulation.engine import run_24hr_simulation
 from ..simulation.portfolios import apply_portfolio_to_profiles, line_capacity_multiplier, transformer_capacity_multiplier
 
+INSTRUCTIONS_PATH = Path(__file__).parent / "instructions" / "capex_agent.md"
+
 
 class CapexAgent:
     """Generates hybrid and capex-heavy portfolios (includes TransformerUpgrade)."""
+
+    def __init__(self):
+        self.instructions = INSTRUCTIONS_PATH.read_text() if INSTRUCTIONS_PATH.exists() else ""
 
     def run(self, profiles, base_summary: dict, max_portfolios: int = 30, required_interventions: list = None) -> list:
         all_portfolios = generate_portfolios(max_active_measures=3, required_interventions=required_interventions)

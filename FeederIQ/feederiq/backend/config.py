@@ -42,11 +42,11 @@ LEVEL_LABELS = {0: "None", 33: "Low", 66: "Medium", 100: "High"}
 
 # Human-friendly intervention labels
 INTERVENTION_LABELS = {
-    "TransformerUpgrade": "Transformer Upgrade",
+    "TransformerUpgrade": "Capacity Upgrade",
     "Battery": "Battery Storage",
     "ManagedCharging": "Managed EV Charging",
-    "PhasedInterconnection": "Phased Interconnection",
-    "DemandTariff": "Demand Tariff",
+    "PhasedInterconnection": "Staged Load Connection",
+    "DemandTariff": "Dynamic Tariffs",
 }
 
 COST_BY_LEVEL = {

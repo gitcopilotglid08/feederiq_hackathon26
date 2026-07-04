@@ -1,5 +1,13 @@
+from pathlib import Path
+
+INSTRUCTIONS_PATH = Path(__file__).parent / "instructions" / "recommendation_agent.md"
+
+
 class RecommendationAgent:
     """Merges NWA and capex results, ranks, and generates decision narrative."""
+
+    def __init__(self):
+        self.instructions = INSTRUCTIONS_PATH.read_text() if INSTRUCTIONS_PATH.exists() else ""
 
     def run(self, nwa_scored: list, capex_scored: list, base_summary: dict, assumptions: dict) -> dict:
         # Merge and rank all portfolios
