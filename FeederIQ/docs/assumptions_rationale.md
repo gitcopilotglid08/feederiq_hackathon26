@@ -31,23 +31,23 @@ Cost scores are **relative planning heuristics** (0–10 scale) derived from NRE
 
 | Intervention | Level | Cost Score | Benchmark Source |
 |---|---|---|---|
-| **Transformer Upgrade** | 33% | 3 | Utility rate cases: $150–$300K per transformer (PG&E 2023 GRC) |
-| | 66% | 6 | Multiple transformer replacements: $500K–$1M range |
-| | 100% | 9 | Full substation upgrade: $1–$5M (FERC Form 1 median for 4kV feeders) |
-| **Battery Storage** | 33% | 3 | NREL ATB 2024: 4-hr BESS at $280/kWh installed (1 MW pilot = ~$1.1M) |
-| | 66% | 5 | Moderate fleet: 2–3 MW at ~$250/kWh (volume discount) |
-| | 100% | 8 | Full deployment: 5+ MW, still below transformer capex at scale |
-| **Managed EV Charging** | 33% | 1 | Software + comms: $50–$150/charger (EPRI EV Pilot, 2023) |
-| | 66% | 2 | Expanded program + incentives: $100–$300/charger |
-| | 100% | 3 | Full fleet management: ~$500K total program cost for 5-bus deployment |
-| **Phased Interconnection** | 33% | 1 | Administrative: interconnection study + metering ($25–$75K) |
-| | 66% | 2 | Partial connection + grid reinforcement: $100–$200K |
-| | 100% | 3 | Full staged connection with DER controls: $200–$400K |
-| **Demand Tariff** | 33% | 1 | Tariff design + AMI analytics: $50–$100K program cost |
-| | 66% | 2 | Moderate TOU/CPP program: $100–$250K (customer outreach + billing) |
-| | 100% | 3 | Full dynamic pricing: $200–$400K (requires AMI + DERMS integration) |
+| **Capacity Upgrade** | Low (33%) | 5 | Single transformer replacement: $150–$500K (PG&E 2023 GRC). Includes procurement, installation, outage management. Lead time: 12–36 months due to global supply constraints. |
+| | Medium (66%) | 8 | Multiple transformer replacements + line reconductoring: $500K–$2M. Requires engineering studies, environmental review, outage coordination. |
+| | High (100%) | 10 | Full substation capacity upgrade: $2–$5M (FERC Form 1 median for 4kV feeders). Major capital project requiring PUC approval, 18–36 month procurement cycles. |
+| **Battery Storage** | Low (33%) | 3 | NREL ATB 2024: 4-hr BESS at $280/kWh installed (1 MW pilot = ~$1.1M) |
+| | Medium (66%) | 5 | Moderate fleet: 2–3 MW at ~$250/kWh (volume discount) |
+| | High (100%) | 8 | Full deployment: 5+ MW, containerized BESS |
+| **Managed EV Charging** | Low (33%) | 1 | Software + comms: $50–$150/charger (EPRI EV Pilot, 2023) |
+| | Medium (66%) | 2 | Expanded program + incentives: $100–$300/charger |
+| | High (100%) | 3 | Full fleet management: ~$500K total program cost for 5-bus deployment |
+| **Staged Load Connection** | Low (33%) | 1 | Administrative: interconnection study + metering ($25–$75K) |
+| | Medium (66%) | 2 | Partial connection + grid reinforcement: $100–$200K |
+| | High (100%) | 3 | Full staged connection with DER controls: $200–$400K |
+| **Dynamic Tariffs** | Low (33%) | 1 | Tariff design + AMI analytics: $50–$100K program cost |
+| | Medium (66%) | 2 | Moderate TOU/CPP program: $100–$250K (customer outreach + billing) |
+| | High (100%) | 3 | Full dynamic pricing: $200–$400K (requires AMI + DERMS integration) |
 
-**Key insight**: NWA solutions (managed charging, demand tariff, phased interconnection) cost 3–10× less than traditional capex for equivalent load management.
+**Key insight**: Capacity upgrades (transformer replacement) are 5–50× more expensive than NWA solutions for equivalent load management, AND have 3–10× longer deployment timelines due to supply chain constraints (DOE Transmission Need Study 2023 reported 2–3 year lead times for power transformers).
 
 **Sources**: NREL Annual Technology Baseline 2024; Lazard LCOE+ v17.0 (2024); PG&E General Rate Case 2023; EPRI "Costs and Benefits of EV Managed Charging" (2023).
 

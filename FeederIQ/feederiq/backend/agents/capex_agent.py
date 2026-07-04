@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 from ..simulation.portfolios import generate_portfolios, score_portfolio, summarize_results
 from ..simulation.engine import run_24hr_simulation
@@ -6,15 +7,36 @@ from ..simulation.portfolios import apply_portfolio_to_profiles, line_capacity_m
 INSTRUCTIONS_PATH = Path(__file__).parent / "instructions" / "capex_agent.md"
 
 
+def _parse_config(text: str) -> dict:
+    """Extract CONFIG yaml block from instruction markdown."""
+    config = {}
+    match = re.search(r"```yaml\n(.*?)```", text, re.DOTALL)
+    if match:
+        for line in match.group(1).strip().split("\n"):
+            if ":" in line:
+                key, val = line.split(":", 1)
+                key = key.strip()
+                val = val.strip()
+                if val.startswith("[") and val.endswith("]"):
+                    val = [v.strip().strip('"').strip("'") for v in val[1:-1].split(",")]
+                elif val.isdigit():
+                    val = int(val)
+                config[key] = val
+    return config
+
+
 class CapexAgent:
-    """Generates hybrid and capex-heavy portfolios (includes TransformerUpgrade)."""
+    """Generates hybrid and capex-heavy portfolios (includes TransformerUpgrade).
+    Behavior is driven by instructions/capex_agent.md CONFIG block."""
 
     def __init__(self):
         self.instructions = INSTRUCTIONS_PATH.read_text() if INSTRUCTIONS_PATH.exists() else ""
+        self.config = _parse_config(self.instructions)
+        self.require_key = self.config.get("require_intervention", "TransformerUpgrade")
 
     def run(self, profiles, base_summary: dict, max_portfolios: int = 30, required_interventions: list = None) -> list:
         all_portfolios = generate_portfolios(max_active_measures=3, required_interventions=required_interventions)
-        capex_portfolios = [p for p in all_portfolios if p["TransformerUpgrade"] > 0]
+        capex_portfolios = [p for p in all_portfolios if p.get(self.require_key, 0) > 0]
         capex_portfolios = capex_portfolios[:max_portfolios]
 
         scored = []
