@@ -192,7 +192,12 @@ The framework inherently favors NWA because:
 - [x] Grid Stress Score explanation with severity scale in baseline tab.
 - [x] Intervention levels renamed: Low/Medium/High (from Pilot/Scaled/Full).
 - [x] Fixed checkpoint messages: proper formatting, no = signs, NWA spelled out.
-- [ ] Add LLM-powered narrative memo generation (requires OpenAI/Anthropic API key).
+- [x] LLM-powered agents via AWS Bedrock (Claude 3 Sonnet). Constraint + Recommendation agents use LLM.
+- [x] Agent instruction files (.md) serve as system prompts for LLM reasoning.
+- [x] Interventions renamed: Capacity Upgrade, Dynamic Tariffs, Staged Load Connection.
+- [x] Increased Capacity Upgrade cost penalty (reflects real transformer costs).
+- [x] Moved scripts to scripts/, docs to docs/, cleaned outputs/.
+- [ ] Real data toggle (use openEDI profiles instead of synthetic curves).
 - [ ] Deploy to cloud / containerize.
 
 ---
@@ -240,7 +245,16 @@ See `assumptions_rationale.md` for full market-backed justification of:
 - Cost scores (NREL ATB 2024, Lazard LCOE+, FERC Form 1)
 - Feasibility scores (PUC proceeding timelines)
 - Deployment speed (DOE NWA case studies)
+- ESG Alignment (IEA 2023, EPRI LCA 2022, NREL 2021, DOE VPP 2023)
 - Scoring weights (aligned with CPUC IRP and NY REV BCA frameworks)
+
+### LLM Integration (Active)
+
+- **Model**: Claude 3 Sonnet via AWS Bedrock (`us.anthropic.claude-3-sonnet-20240229-v1:0`)
+- **Agents using LLM**: Constraint Agent (violation interpretation), Recommendation Agent (memo generation)
+- **Pattern**: Agent instruction `.md` files serve as LLM system prompts
+- **Fallback**: Template-based output if Bedrock unavailable (no crash)
+- **Agent instructions** at `feederiq/backend/agents/instructions/` contain CONFIG blocks that drive agent behavior
 
 ### FastAPI Endpoints
 

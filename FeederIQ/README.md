@@ -225,8 +225,10 @@ NWA options inherently score higher across cost, speed, and ESG dimensions. See 
 
 ## Tech Stack
 
+- **LLM**: Claude 3 Sonnet (Anthropic) via AWS Bedrock
 - **Backend**: FastAPI + Uvicorn
 - **Frontend**: Streamlit + Plotly
 - **Orchestration**: LangGraph (with interrupt-based human-in-the-loop)
 - **Simulation**: OpenDSS via opendssdirect.py
 - **Feeder model**: IEEE 123-bus (openEDI/oedisi-ieee123, BSD-3-Clause)
+- **Agent instructions**: Markdown files (system prompts) driving agent behavior
