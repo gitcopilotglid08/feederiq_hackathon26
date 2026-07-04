@@ -216,7 +216,7 @@ with st.sidebar:
     use_real_data = st.checkbox("Use real load profiles (DOE openEDI)", value=False, key="real_data",
                                 help="91 bus-level measured load profiles at 15-minute resolution across 365 days. Source: DOE Open Energy Data Initiative / oedisi-ieee123. The system selects the peak-stress day from the full year for analysis.")
     if use_real_data:
-        st.caption("✓ Measurement-calibrated profiles: 91 load shapes × 35,040 data points × 15-min resolution. Source: DOE Open Energy Data Initiative (BSD-3). Peak stress day selected from full-year dataset automatically.")
+        st.caption("Peak stress day selected from full-year dataset automatically.")
     else:
         st.caption("Parametric synthetic profiles (math-generated 24h curves)")
 
