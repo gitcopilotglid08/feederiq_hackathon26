@@ -413,19 +413,9 @@ if st.session_state.running and st.session_state.study_data is None:
         "use_real_data": use_real_data,
     }
 
-    # Override with demo preset if demo button was clicked
-    if st.session_state.get("demo_mode"):
-        payload = {
-            "horizon_label": "12m", "ev_level": "High", "solar_level": "Base",
-            "dc_level": "Moderate", "dc_timeline_label": "12m",
-            "max_active_measures": 3, "max_portfolios": 60,
-            "required_interventions": None, "use_real_data": True,
-        }
-        st.session_state.demo_mode = False
-
     api_done = False
     for i, (icon, name, detail) in enumerate(agents):
-        for pct in range(0, 101, 4):
+        for pct in range(0, 101, 5):
             progress.progress((i + pct / 100) / len(agents))
             html = ""
             for j, (ic, nm, dt) in enumerate(agents):
@@ -447,7 +437,7 @@ if st.session_state.running and st.session_state.study_data is None:
                     st.session_state.running = False
                     st.stop()
             else:
-                time.sleep(0.035)
+                time.sleep(0.06)
 
     progress.progress(1.0)
     # Show agent summaries from actual results
@@ -466,9 +456,11 @@ if st.session_state.running and st.session_state.study_data is None:
     for (ic, nm, dt), summary in zip(agents, agent_summaries):
         html += f'<div class="agent-row done"><span style="font-size:1.1rem;">{ic}</span><div><div class="name">{nm}</div><div class="detail">{summary}</div></div></div>'
     agent_container.markdown(html, unsafe_allow_html=True)
-    time.sleep(0.5)
-    st.session_state.running = False
-    st.rerun()
+
+    st.success("✅ All agents completed. Review summaries above, then view results.")
+    if st.button("▶  View Results", key="view_results_btn"):
+        st.session_state.running = False
+        st.rerun()
 
 # ── Results ───────────────────────────────────────────────────────────────────
 if st.session_state.study_data:
@@ -848,14 +840,7 @@ elif not st.session_state.running:
         <div class="card" style="flex:1;border-left-color:{C3};"><div class="lbl" style="color:{C3};">Step 3</div><div class="val" style="font-size:1.1rem;">Decide</div><div class="sub">Multi-criteria ranked recommendations</div></div>
     </div>''', unsafe_allow_html=True)
 
-    st.caption("Configure parameters in the sidebar and click **Run Study**. Or use the demo preset below.")
-
-    # Demo preset button
-    if st.button("\U0001f3af  Run Demo (12m horizon, High EV, Moderate DC, real data)", key="demo_btn"):
-        st.session_state.running = True
-        st.session_state.study_data = None
-        st.session_state.demo_mode = True
-        st.rerun()
+    st.caption("Configure parameters in the sidebar and click **Run Study**.")
 
     st.markdown(f'<div class="sub-head">Existing Network Topology</div>', unsafe_allow_html=True)
     st.caption("IEEE 123-bus distribution feeder with scenario assets. Hover for details.")
