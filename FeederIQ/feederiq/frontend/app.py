@@ -280,6 +280,10 @@ with st.sidebar:
                                 help="Exclude solutions with technical improvement below this threshold")
     st.caption(f"Only show solutions with ≥ {min_grid_relief}% grid stress reduction")
 
+    st.markdown(f'<div class="sidebar-section"><b>💾 Save Results</b></div>', unsafe_allow_html=True)
+    save_outputs = st.checkbox("Save run outputs to disk", value=False, key="save_out",
+                               help="When enabled, results are saved to outputs/ folder")
+
     st.markdown("---")
     run_btn = st.button("▶  Run Study", use_container_width=True)
 

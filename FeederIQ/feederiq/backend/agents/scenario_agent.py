@@ -1,9 +1,15 @@
+from pathlib import Path
 from ..config import PLANNING_HORIZONS, EV_GROWTH, SOLAR_ADOPTION, DATA_CENTER_MW, DATA_CENTER_TIMELINE_MONTHS
 from ..simulation.profiles import generate_profiles
+
+INSTRUCTIONS_PATH = Path(__file__).parent / "instructions" / "scenario_agent.md"
 
 
 class ScenarioAgent:
     """Converts user scenario selections into numeric assumptions and 24-hour profiles."""
+
+    def __init__(self):
+        self.instructions = INSTRUCTIONS_PATH.read_text() if INSTRUCTIONS_PATH.exists() else ""
 
     def run(self, scenario: dict) -> dict:
         horizon_years = PLANNING_HORIZONS[scenario["horizon_label"]]

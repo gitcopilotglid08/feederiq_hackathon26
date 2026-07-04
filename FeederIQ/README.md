@@ -1,6 +1,8 @@
 # FeederIQ – Agentic Distribution Planning
 
-An AI-powered planning copilot that forecasts feeder congestion under load-growth scenarios and recommends the cheapest fix — prioritizing **non-wires alternatives** (NWA) before expensive capex.
+An AI-powered planning copilot that stress-tests distribution feeders under future load-growth scenarios and recommends optimal interventions using multi-criteria scoring — prioritizing **non-wires alternatives** (NWA) before expensive capex.
+
+**Documentation**: See `docs/` folder for detailed project reference, assumptions rationale, and progress tracker.
 
 ## Quick Start
 
