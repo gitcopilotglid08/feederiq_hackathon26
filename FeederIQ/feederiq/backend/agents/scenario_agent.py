@@ -1,6 +1,7 @@
 from pathlib import Path
 from ..config import PLANNING_HORIZONS, EV_GROWTH, SOLAR_ADOPTION, DATA_CENTER_MW, DATA_CENTER_TIMELINE_MONTHS
 from ..simulation.profiles import generate_profiles
+from ..simulation.real_data import generate_profiles_real_data, is_real_data_available
 
 INSTRUCTIONS_PATH = Path(__file__).parent / "instructions" / "scenario_agent.md"
 
@@ -13,13 +14,32 @@ class ScenarioAgent:
 
     def run(self, scenario: dict) -> dict:
         horizon_years = PLANNING_HORIZONS[scenario["horizon_label"]]
-        profiles = generate_profiles(
-            scenario["horizon_label"],
-            scenario["ev_level"],
-            scenario["solar_level"],
-            scenario["dc_level"],
-            scenario["dc_timeline_label"],
-        )
+        use_real = scenario.get("use_real_data", False)
+
+        # Use real openEDI profiles if requested and available
+        profiles = None
+        data_source = "synthetic"
+        if use_real and is_real_data_available():
+            profiles = generate_profiles_real_data(
+                scenario["horizon_label"],
+                scenario["ev_level"],
+                scenario["solar_level"],
+                scenario["dc_level"],
+                scenario["dc_timeline_label"],
+            )
+            data_source = "openEDI (DOE)"
+
+        # Fallback to synthetic
+        if profiles is None:
+            profiles = generate_profiles(
+                scenario["horizon_label"],
+                scenario["ev_level"],
+                scenario["solar_level"],
+                scenario["dc_level"],
+                scenario["dc_timeline_label"],
+            )
+            data_source = "synthetic"
+
         assumptions = {
             "horizon_years": horizon_years,
             "ev_growth_rate": EV_GROWTH[scenario["ev_level"]],
@@ -30,5 +50,6 @@ class ScenarioAgent:
             "peak_ev_mw": float(profiles["ev_mw"].max()),
             "peak_solar_mw": float(profiles["solar_mw"].max()),
             "peak_dc_mw": float(profiles["dc_mw"].max()),
+            "data_source": data_source,
         }
         return {"profiles": profiles, "assumptions": assumptions}

@@ -280,7 +280,15 @@ with st.sidebar:
                                 help="Exclude solutions with technical improvement below this threshold")
     st.caption(f"Only show solutions with ≥ {min_grid_relief}% grid stress reduction")
 
-    st.markdown(f'<div class="sidebar-section"><b>💾 Save Results</b></div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="sidebar-section"><b>� Data Source</b></div>', unsafe_allow_html=True)
+    use_real_data = st.checkbox("Use real openEDI profiles", value=False, key="real_data",
+                                help="Use DOE Open Energy Data Initiative load profiles (measurement-based) instead of synthetic curves")
+    if use_real_data:
+        st.caption("Peak day from 1-year measured load profiles (91 buses)")
+    else:
+        st.caption("Synthetic 24-hour curves (math-generated)")
+
+    st.markdown(f'<div class="sidebar-section"><b>�💾 Save Results</b></div>', unsafe_allow_html=True)
     save_outputs = st.checkbox("Save run outputs to disk", value=False, key="save_out",
                                help="When enabled, results are saved to outputs/ folder")
 
@@ -333,6 +341,7 @@ if st.session_state.running and st.session_state.study_data is None:
         "max_active_measures": max_active,
         "max_portfolios": max_portfolios,
         "required_interventions": req_interventions if req_interventions else None,
+        "use_real_data": use_real_data,
     }
 
     api_done = False

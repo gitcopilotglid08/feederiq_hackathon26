@@ -38,6 +38,7 @@ def create_study(req: ScenarioRequest):
         "solar_level": req.solar_level,
         "dc_level": req.dc_level,
         "dc_timeline_label": req.dc_timeline_label,
+        "use_real_data": req.use_real_data,
     }
     try:
         result = run_study(scenario, max_portfolios=req.max_portfolios or 60,

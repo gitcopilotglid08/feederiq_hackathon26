@@ -59,6 +59,7 @@ class StudyState(TypedDict):
 def scenario_node(state: StudyState) -> dict:
     agent = ScenarioAgent()
     result = agent.run(state["scenario"])
+    data_source = result["assumptions"].get("data_source", "synthetic")
     return {
         "profiles_records": _df_to_records(result["profiles"]),
         "assumptions": result["assumptions"],
@@ -68,7 +69,8 @@ def scenario_node(state: StudyState) -> dict:
                        f"EV growth: {state['scenario']['ev_level']}, Solar: {state['scenario']['solar_level']}, "
                        f"Data Center: {state['scenario']['dc_level']}. "
                        f"Peak EV demand: {result['assumptions']['peak_ev_mw']:.2f} MW. "
-                       f"Peak Solar generation: {result['assumptions']['peak_solar_mw']:.2f} MW.",
+                       f"Peak Solar generation: {result['assumptions']['peak_solar_mw']:.2f} MW. "
+                       f"Data source: {data_source}.",
             "requires_approval": False,
         }],
     }
