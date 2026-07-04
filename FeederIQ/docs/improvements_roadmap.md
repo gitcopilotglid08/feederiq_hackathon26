@@ -73,7 +73,11 @@
 
 ### Currently Implemented
 - Agent instruction files (markdown) drive agent behavior (configurable without code changes)
-- LLM-powered decision memo via AWS Bedrock (Claude)
+- LLM-powered decision memo generation via AWS Bedrock (Claude 3 Sonnet)
+- LLM-powered constraint violation interpretation (natural language)
+- Real data toggle: openEDI DOE profiles vs synthetic parametric curves
+- Before/after grid stress visualization (red→green node map)
+- Agent completion summaries showing actual findings
 - Fallback to template when LLM unavailable
 
 ### Planned

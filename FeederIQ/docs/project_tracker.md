@@ -197,7 +197,10 @@ The framework inherently favors NWA because:
 - [x] Interventions renamed: Capacity Upgrade, Dynamic Tariffs, Staged Load Connection.
 - [x] Increased Capacity Upgrade cost penalty (reflects real transformer costs).
 - [x] Moved scripts to scripts/, docs to docs/, cleaned outputs/.
-- [ ] Real data toggle (use openEDI profiles instead of synthetic curves).
+- [x] Real data toggle: openEDI DOE profiles (91 CSVs × 35040 pts) vs synthetic curves.
+- [x] Before/after grid stress visualization (red→green node map).
+- [x] Agent completion summaries (shows actual findings, not just 'Complete').
+- [x] View Results button (no auto-redirect from agent page).
 - [ ] Deploy to cloud / containerize.
 
 ---
