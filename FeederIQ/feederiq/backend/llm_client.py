@@ -20,8 +20,8 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Default model - Nova Micro works immediately; switch to Claude once approved
-BEDROCK_MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "amazon.nova-micro-v1:0")
+# Default model - Claude 3 Sonnet via cross-region inference profile (cost-efficient)
+BEDROCK_MODEL_ID = os.environ.get("BEDROCK_MODEL_ID", "us.anthropic.claude-3-sonnet-20240229-v1:0")
 BEDROCK_REGION = os.environ.get("AWS_DEFAULT_REGION", os.environ.get("AWS_REGION", "us-east-1"))
 
 
