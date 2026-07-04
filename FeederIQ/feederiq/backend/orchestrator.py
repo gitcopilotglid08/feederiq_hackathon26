@@ -84,17 +84,20 @@ def simulation_node(state: StudyState) -> dict:
 def constraint_node(state: StudyState) -> dict:
     agent = ConstraintAgent()
     analysis = agent.analyze(state["base_results"])
+    interpretation = analysis.get("interpretation", "")
     return {
         "base_summary": analysis["summary"],
         "violations_detected": analysis["violations_detected"],
         "severity": analysis["severity"],
         "checkpoints": state.get("checkpoints", []) + [{
             "step": "constraint_analysis",
-            "message": f"Baseline grid stress score: {analysis['summary']['grid_stress_score']:.0f} "
-                       f"(severity: {analysis['severity']}). "
-                       f"Violations detected: {analysis['violations_detected']}. "
-                       f"Undervoltage buses: {analysis['summary']['total_undervoltage_buses']}, "
-                       f"Line overloads: {analysis['summary']['total_line_overloads']}.",
+            "message": interpretation if interpretation else (
+                f"Baseline grid stress score: {analysis['summary']['grid_stress_score']:.0f} "
+                f"(severity: {analysis['severity']}). "
+                f"Violations detected: {analysis['violations_detected']}. "
+                f"Undervoltage buses: {analysis['summary']['total_undervoltage_buses']}, "
+                f"Line overloads: {analysis['summary']['total_line_overloads']}."
+            ),
             "requires_approval": True,
         }],
     }
