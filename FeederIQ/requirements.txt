@@ -11,3 +11,4 @@ plotly
 requests
 langgraph
 langchain-core
+boto3
