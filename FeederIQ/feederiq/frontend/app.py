@@ -462,6 +462,29 @@ if st.session_state.running and st.session_state.study_data is None:
         st.session_state.running = False
         st.rerun()
 
+# Show agent summaries page (after rerun, running=True but data exists)
+elif st.session_state.running and st.session_state.study_data:
+    st.markdown('<div class="sec-head">Agent Execution - Complete</div>', unsafe_allow_html=True)
+    study = st.session_state.study_data
+    bs = study.get("base_summary", {})
+    top_rec = study.get("top_recommendation", {})
+    agents_done = [
+        ("🔬", "Scenario Agent", f"✓ Profiles generated."),
+        ("⚡", "Simulation Agent", f"✓ 24-hour power flow complete."),
+        ("🔍", "Constraint Agent", f"✓ Grid stress: {bs.get('grid_stress_score', 0):.0f}. Overloads: {bs.get('total_line_overloads', 0)} lines, {bs.get('total_transformer_overloads', 0)} transformers."),
+        ("🌱", "NWA Agent", f"✓ {len(study.get('ranking', []))} portfolios scored."),
+        ("🔧", "Capex Agent", f"✓ Capex options evaluated."),
+        ("📊", "Recommendation Agent", f"✓ Top: {top_rec.get('portfolio_name', 'N/A')} (score: {top_rec.get('final_score', 0):.2f})"),
+    ]
+    html = ""
+    for ic, nm, detail in agents_done:
+        html += f'<div class="agent-row done"><span style="font-size:1.1rem;">{ic}</span><div><div class="name">{nm}</div><div class="detail">{detail}</div></div></div>'
+    st.markdown(html, unsafe_allow_html=True)
+    st.success("✅ All agents completed. Review summaries above, then view results.")
+    if st.button("▶  View Results", key="view_results_btn2"):
+        st.session_state.running = False
+        st.rerun()
+
 # ── Results ───────────────────────────────────────────────────────────────────
 if st.session_state.study_data and not st.session_state.running:
     data = st.session_state.study_data
