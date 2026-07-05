@@ -532,9 +532,9 @@ if st.session_state.study_data and not st.session_state.running:
                 <div style="flex:1;background:#1B8C3A;height:100%;"></div>
             </div>
             <div style="display:flex;justify-content:space-between;margin-top:4px;">
-                <span style="font:600 0.7rem Arial;color:{C_GREY};">0 — No improvement</span>
-                <span style="font:600 0.7rem Arial;color:{C_GREY};">5 — Moderate</span>
-                <span style="font:600 0.7rem Arial;color:{C_GREY};">10 — Fully resolved</span>
+                <span style="font:600 0.7rem Arial;color:{C_GREY};">0 - No improvement</span>
+                <span style="font:600 0.7rem Arial;color:{C_GREY};">5 - Moderate</span>
+                <span style="font:600 0.7rem Arial;color:{C_GREY};">10 - Fully resolved</span>
             </div>
         </div>''', unsafe_allow_html=True)
 
@@ -588,13 +588,13 @@ if st.session_state.study_data and not st.session_state.running:
                 score_bar_html("ESG Alignment (15%)", esg_sc),
                 unsafe_allow_html=True)
             st.markdown(f'''<div class="info-box">
-                <div style="font:400 0.88rem Arial;color:{C_DARK};line-height:1.8;">
-                • <b style="color:{C1};">Grid Relief</b> ‣ % Reduction in equipment overloads and voltage violations<br>
-                • <b style="color:{C1};">Cost Efficiency</b> ‣ Lower implementation cost relative to full capex alternatives<br>
-                • <b style="color:{C1};">Speed to Value</b> ‣ Combined feasibility and deployment timeline<br>
-                • <b style="color:{C1};">ESG Alignment</b> ‣ Sustainability benefit: lower carbon, less material intensity
+                <div style="font:400 0.78rem Arial;color:{C_DARK};line-height:1.6;">
+                • <b style="color:{C1};">Grid Relief</b> - % Reduction in overloads and voltage violations<br>
+                • <b style="color:{C1};">Cost Efficiency</b> - Lower cost relative to full capex alternatives<br>
+                • <b style="color:{C1};">Speed to Value</b> - Combined feasibility and deployment timeline<br>
+                • <b style="color:{C1};">ESG Alignment</b> - Lower carbon, less material intensity
                 </div>
-                <div style="font:italic 400 0.72rem Arial;color:{C_GREY};margin-top:6px;">*Scoring framework aligned with CPUC IRP (D.22-02-004) and NY REV BCA methodology.</div>
+                <div style="font:italic 400 0.68rem Arial;color:{C_GREY};margin-top:4px;">*CPUC IRP (D.22-02-004) and NY REV BCA methodology.</div>
             </div>''', unsafe_allow_html=True)
 
         with col_radar:
@@ -631,6 +631,17 @@ if st.session_state.study_data and not st.session_state.running:
         bs = data.get("base_summary", {})
         impr = selected.get("technical_improvement_pct", 0)
         after_stress = bs.get("grid_stress_score", 0) * (1 - impr / 100)
+
+        # Severity line
+        stress_val = bs.get('grid_stress_score', 0)
+        if stress_val > 3000: sev_txt, sev_clr = "Critical", C_RED
+        elif stress_val > 1000: sev_txt, sev_clr = "High", C1
+        elif stress_val > 300: sev_txt, sev_clr = "Moderate", C2
+        else: sev_txt, sev_clr = "Low", C_GREEN
+        st.markdown(f'''<div style="font:400 0.82rem Arial;color:{C_DARK};margin-bottom:8px;">
+            Current severity: <b style="color:{sev_clr};">{sev_txt}</b> (score: {stress_val:.0f})
+            &nbsp; <span style="font:400 0.7rem Arial;color:{C_GREY};">Scale: 0 (no issues) - 300 (Low) - 1000 (Moderate) - 3000 (High) - 5000+ (Critical)</span>
+        </div>''', unsafe_allow_html=True)
 
         ba1, ba2, ba3 = st.columns(3)
         ba1.markdown(card_html("Before (No Intervention)", f"{bs.get('grid_stress_score', 0):.0f}", "Grid stress score"), unsafe_allow_html=True)
@@ -841,13 +852,13 @@ if st.session_state.study_data and not st.session_state.running:
             st.plotly_chart(fig3, use_container_width=True)
 
             st.markdown(f'''<div class="info-box"><div style="font:400 0.85rem Arial;color:{C_DARK};line-height:1.9;">
-                • <b style="color:{C1};">Feeder Multiplier</b> scales all existing loads (morning and evening peaks, 3% annual growth)<br>
-                • <b style="color:{C1};">EV Demand</b> peaks 19:00-22:00 based on US residential charging research. Peak Demand Window (sidebar) controls when interventions are applied, not when EV naturally peaks<br>
-                • <b style="color:{C1};">Solar Generation</b> bell curve sunrise to sunset, reduces net demand at midday<br>
-                • <b style="color:{C1};">Data Center</b> near-constant baseload at 97% utilization
+                • <b style="color:{C1};">Feeder Multiplier</b> scales all existing loads (morning and evening peaks, 3% annual growth).<br>
+                • <b style="color:{C1};">EV Demand</b> peaks 19:00-22:00 based on US residential charging research. Peak Demand Window (sidebar) controls when interventions are applied, not when EV naturally peaks.<br>
+                • <b style="color:{C1};">Solar Generation</b> bell curve sunrise to sunset, reduces net demand at midday.<br>
+                • <b style="color:{C1};">Data Center</b> near-constant baseload at 97% utilization.
                 </div>
                 <div style="font:italic 400 0.68rem Arial;color:{C_GREY};margin-top:6px;">
-                Sources: EIA Annual Energy Outlook 2024 (EV growth), SEIA Solar Market Insight 2024 (solar adoption), DOE Grid Deployment Office 2024 (DC load patterns), FERC Form 1 (3% base growth consistent with 2020-2024 US distribution load growth of 2.5-3.5% annually).
+                <b>Sources:</b> EIA Annual Energy Outlook 2024 (EV growth), SEIA Solar Market Insight 2024 (solar adoption), DOE Grid Deployment Office 2024 (DC load patterns), FERC Form 1 (3% base growth consistent with 2020-2024 US distribution load growth of 2.5-3.5% annually).
                 </div>
             </div>''', unsafe_allow_html=True)
 
