@@ -1,4 +1,4 @@
-# FeederIQ — Assumptions Rationale & Market Benchmarks
+# FeederIQ - Assumptions Rationale & Market Benchmarks
 
 ## Purpose
 
@@ -14,7 +14,7 @@ The four-level framework maps to EPRI's technology deployment maturity stages us
 
 | Level | Label | EPRI Equivalent | Industry Context |
 |-------|-------|----------------|------------------|
-| 0% | Not deployed | N/A | Status quo — no intervention |
+| 0% | Not deployed | N/A | Status quo - no intervention |
 | 33% | Pilot / early adoption | Stage 1: Demonstration | Aligns with DOE-funded NWA pilot programs (typically 25–35% penetration). E.g., ConEdison BQDM project started at ~30% of target capacity. |
 | 66% | Moderate-scale rollout | Stage 2: Early deployment | Matches utility programs at midpoint maturity. E.g., California's SGIP achieved ~60% of planned DER capacity by Year 3. |
 | 100% | Full deployment | Stage 3: Full commercial | Represents full planned capacity. Rare within planning horizons < 5 years for physical infrastructure. |
@@ -27,7 +27,7 @@ The four-level framework maps to EPRI's technology deployment maturity stages us
 
 ### Methodology
 
-Cost scores are **relative planning heuristics** (0–10 scale) derived from NREL ATB 2024, Lazard LCOE+ v17.0, and FERC Form 1 filings. Higher raw score = higher cost burden.
+Cost scores are **relative planning heuristics** (0-10 scale) derived from NREL ATB 2024, Lazard LCOE+ v17.0, and FERC Form 1 filings. Higher raw score = higher cost burden.
 
 | Intervention | Level | Cost Score | Benchmark Source |
 |---|---|---|---|
@@ -61,7 +61,7 @@ Feasibility reflects regulatory, operational, and implementation complexity. Sca
 
 | Intervention | Level | Score | Justification |
 |---|---|---|---|
-| **Transformer Upgrade** | 33% | 8 | Standard utility planning process; lead times 6–12 months |
+| **Capacity Upgrade** | 33% | 8 | Standard utility planning process; lead times 6–12 months |
 | | 66% | 6 | Multiple assets; supply chain risk (transformer shortage 2022–2025) |
 | | 100% | 4 | Major capital project; board/PUC approval, 18–36 month lead times |
 | **Battery Storage** | 33% | 8 | Proven technology; interconnection study required |
@@ -70,10 +70,10 @@ Feasibility reflects regulatory, operational, and implementation complexity. Sca
 | **Managed EV Charging** | 33% | 9 | Software deployment; opt-in program, minimal regulatory hurdle |
 | | 66% | 8 | Requires customer enrollment at scale |
 | | 100% | 7 | Full program requires AMI + EVSE communication standards |
-| **Phased Interconnection** | 33% | 8 | Initial phase within utility's delegated authority |
+| **Staged Load Connection** | 33% | 8 | Initial phase within utility's delegated authority |
 | | 66% | 7 | Requires updated interconnection agreement |
 | | 100% | 6 | Full staged plan needs PUC review in many jurisdictions |
-| **Demand Tariff** | 33% | 8 | Pilot tariff within existing rate authority |
+| **Dynamic Tariffs** | 33% | 8 | Pilot tariff within existing rate authority |
 | | 66% | 7 | Expanded TOU/CPP; customer communication program needed |
 | | 100% | 6 | Full dynamic pricing; tariff filing + PUC approval cycle (12–18 months) |
 
@@ -89,7 +89,7 @@ Measures time-to-benefit. Scale: 10 = immediate, 1 = multiple years. Based on DO
 
 | Intervention | Level | Score | Time to Deploy |
 |---|---|---|---|
-| **Transformer Upgrade** | 33% | 7 | 6–12 months (single unit, if available) |
+| **Capacity Upgrade** | 33% | 7 | 6–12 months (single unit, if available) |
 | | 66% | 5 | 12–18 months (multi-unit, procurement lag) |
 | | 100% | 3 | 18–36 months (full substation work, outage scheduling) |
 | **Battery Storage** | 33% | 8 | 3–6 months (containerized BESS, pre-engineered) |
@@ -98,10 +98,10 @@ Measures time-to-benefit. Scale: 10 = immediate, 1 = multiple years. Based on DO
 | **Managed EV Charging** | 33% | 9 | 1–3 months (software rollout to enrolled customers) |
 | | 66% | 8 | 3–6 months (expanded enrollment + EVSE firmware updates) |
 | | 100% | 7 | 6–9 months (full fleet, all eligible customers) |
-| **Phased Interconnection** | 33% | 8 | 2–4 months (administrative phase, metering) |
+| **Staged Load Connection** | 33% | 8 | 2–4 months (administrative phase, metering) |
 | | 66% | 7 | 4–8 months (partial energization + monitoring) |
 | | 100% | 6 | 8–14 months (full staged ramp-up with grid studies) |
-| **Demand Tariff** | 33% | 8 | 2–4 months (pilot, existing billing system) |
+| **Dynamic Tariffs** | 33% | 8 | 2–4 months (pilot, existing billing system) |
 | | 66% | 7 | 4–8 months (expanded program, customer onboarding) |
 | | 100% | 6 | 8–14 months (full dynamic pricing, AMI integration) |
 
@@ -142,7 +142,7 @@ Scores are based on **lifecycle carbon intensity** and **material intensity** of
 
 | Intervention | Level | ESG Score | Rationale |
 |---|---|---|---|
-| **Transformer Upgrade** | 33% | 7 | Single unit: ~15-25 tonnes CO2e embodied (steel, copper, mineral oil). Source: EPRI LCA 2022 |
+| **Capacity Upgrade** | 33% | 7 | Single unit: ~15-25 tonnes CO2e embodied (steel, copper, mineral oil). Source: EPRI LCA 2022 |
 | | 66% | 5 | Multiple units: 30-50 tonnes CO2e + construction emissions + SF6 risk in older switchgear |
 | | 100% | 3 | Full substation: 50-100+ tonnes CO2e, significant material extraction, 20+ year asset lock-in |
 | **Battery Storage** | 33% | 8 | Li-ion mining impact offset by enabling renewable integration and reducing curtailment |
@@ -151,21 +151,21 @@ Scores are based on **lifecycle carbon intensity** and **material intensity** of
 | **Managed EV Charging** | 33% | 9 | Pure software/controls: near-zero additional carbon, reduces peak fossil generation |
 | | 66% | 9 | Same: behavioral/software intervention, shifts load from peak fossil hours to off-peak/renewable |
 | | 100% | 9 | Maximum demand shifting: estimated 0.3-0.5 tonnes CO2 avoided per EV annually (DOE VPP 2023) |
-| **Phased Interconnection** | 33% | 9 | Administrative controls; reduces peak demand without new physical assets |
+| **Staged Load Connection** | 33% | 9 | Administrative controls; reduces peak demand without new physical assets |
 | | 66% | 8 | Some monitoring equipment; still primarily operational/contractual |
 | | 100% | 7 | Staged connection requires some grid-side reinforcement, but far less than full upgrade |
-| **Demand Tariff** | 33% | 9 | Price signals via existing AMI: zero additional carbon, behavioral demand reduction |
+| **Dynamic Tariffs** | 33% | 9 | Price signals via existing AMI: zero additional carbon, behavioral demand reduction |
 | | 66% | 9 | Expanded program: leverages existing infrastructure, reduces peak fossil dispatch |
 | | 100% | 9 | Full dynamic pricing: DOE estimates 10-15% peak reduction → proportional carbon savings |
 
 ### Key Insight
 
-**Software/behavioral interventions** (Managed Charging, Demand Tariff) achieve ESG scores of 9/10 at all deployment levels because they:
+**Software/behavioral interventions** (Managed Charging, Dynamic Tariffs) achieve ESG scores of 9/10 at all deployment levels because they:
 1. Require no new physical materials or manufacturing
 2. Actively reduce peak demand → displaces marginal fossil generation (typically gas CT)
 3. Leverage existing infrastructure (AMI, smart chargers, billing systems)
 
-**Physical infrastructure** (Transformer Upgrade) scores lowest because:
+**Physical infrastructure** (Capacity Upgrade) scores lowest because:
 1. High embodied carbon: steel (1.8 tCO2/tonne), copper (3.5 tCO2/tonne), mineral oil
 2. Manufacturing and transport emissions
 3. 20-40 year asset lock-in with no flexibility to adapt to changing load patterns
@@ -190,19 +190,21 @@ Scores are based on **lifecycle carbon intensity** and **material intensity** of
 
 ### Solar Adoption
 
-| Level | Regional MW | Source |
+| Level | Feeder-Equivalent MW | Source |
 |---|---|---|
-| Low | 100 MW | SEIA Q1 2024 — Bottom-quartile utility service territory |
-| Base | 200 MW | SEIA Q1 2024 — Median US utility territory |
-| High | 300 MW | SEIA Q1 2024 — Top-quartile (CA, TX, FL) |
+| Low | 1 MW | Scaled from SEIA Q1 2024 regional data. For a 4.16 kV feeder serving ~5,000 customers, 1 MW DER solar is consistent with bottom-quartile penetration. |
+| Base | 2 MW | SEIA Q1 2024 median US utility territory, scaled to single-feeder equivalent. Consistent with IEEE 1547-2018 hosting capacity studies. |
+| High | 3 MW | Top-quartile DER penetration (CA, TX, FL). Approaches hosting capacity limits for 4 kV class feeders per EPRI DER integration studies. |
 
 ### Data Center Demand
 
 | Level | MW | Source |
 |---|---|---|
-| Low | 1.0 MW | Small edge facility / enterprise colo |
-| Moderate | 1.75 MW | Mid-size campus, typical new interconnection request |
-| High | 3.0 MW | Large campus phase; DOE estimates 35+ GW pipeline through 2030 |
+| Low | 1.0 MW | Small edge facility / enterprise colocation. Typical of 10-20 rack deployments. Source: Uptime Institute 2024 Global Data Center Survey. |
+| Moderate | 1.75 MW | Mid-size campus, typical new interconnection request at distribution level. Source: DOE Grid Deployment Office 2023 — median distribution-connected DC request. |
+| High | 3.0 MW | Large campus phase or AI/ML training cluster. Source: DOE "Transmission Needs Study" 2023 reports 35+ GW pipeline; distribution-level requests typically 1-5 MW per FERC interconnection queue data. |
+
+**Note on IEEE 123-bus context**: The IEEE 123-bus feeder is rated at ~4.16 kV with peak load of approximately 3.5 MW. Data center requests of 1-3 MW represent 28-85% of total feeder capacity — a realistic stress scenario for distribution planning.
 
 **Sources**: EIA Annual Energy Outlook 2024; SEIA/Wood Mackenzie Solar Market Insight Q1 2024; DOE Grid Deployment Office "Transmission Needs Study" (2023); BloombergNEF Electric Vehicle Outlook 2024.
 

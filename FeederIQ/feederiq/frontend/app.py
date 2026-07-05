@@ -329,7 +329,7 @@ with st.sidebar:
     st.markdown(f'<div class="sidebar-section"><b>🕐 Peak Demand Window</b></div>', unsafe_allow_html=True)
     st.caption("System peak hours for demand tariff and managed charging application (based on US utility standard practice 5-9 PM).")
     peak_start, peak_end = st.slider("Peak hours", 0, 23, (17, 21), key="peak_hrs")
-    st.caption(f"Peak window: {peak_start}:00 – {peak_end}:00")
+    st.caption(f"Peak window: {peak_start}:00 - {peak_end}:00")
 
     st.markdown("---")
     st.markdown(f'<div class="sidebar-section"><b>Candidate Portfolios to Evaluate</b></div>', unsafe_allow_html=True)
@@ -463,7 +463,7 @@ if st.session_state.running and st.session_state.study_data is None:
         st.rerun()
 
 # ── Results ───────────────────────────────────────────────────────────────────
-if st.session_state.study_data:
+if st.session_state.study_data and not st.session_state.running:
     data = st.session_state.study_data
     ranking = data.get("ranking", [])
 
@@ -621,6 +621,23 @@ if st.session_state.study_data:
         if ba_map:
             st.plotly_chart(ba_map, use_container_width=True)
 
+        # Grid stress formula (with help icon)
+        with st.expander("ℹ️ How is Grid Stress Score calculated?"):
+            st.markdown(f'''<div style="font:400 0.85rem Arial;color:{C_DARK};line-height:2;">
+                <div style="background:#F9F9F9;border-radius:6px;padding:12px 16px;border:1px solid #EBEBEB;font-family:monospace;font-size:0.85rem;margin-bottom:8px;">
+                    Grid Stress = <b style="color:{C_RED};">20</b> x convergence failures
+                    + <b style="color:{C1};">5</b> x line overloads
+                    + <b style="color:{C1};">6</b> x transformer overloads
+                    + <b style="color:{C2};">2</b> x voltage violations
+                </div>
+                <div style="font:400 0.78rem Arial;color:{C_GREY};">
+                    Weights reflect severity: convergence failures (grid infeasible) are most critical (x20),
+                    transformer overloads (costly asset damage risk, 18-36 month replacement) weighted x6,
+                    line overloads (thermal risk, easier to repair) x5, voltage violations (quality-of-service) x2.
+                    Based on IEEE C57.91 transformer loading guide and ANSI C84.1 voltage standards.
+                </div>
+            </div>''', unsafe_allow_html=True)
+
         # Hourly comparison with non-uniform reduction (stronger during peak)
         base_results = data.get("base_results", [])
         profiles = data.get("profiles", {})
@@ -652,7 +669,7 @@ if st.session_state.study_data:
             fig_comp.add_trace(go.Bar(x=br_df["time"], y=after_lines, name="After Intervention", marker_color=C_GREEN, opacity=0.75))
             fig_comp.update_layout(
                 barmode="group", height=250, margin=dict(t=10, b=30),
-                xaxis_title="Hour", yaxis_title="Line Overloads",
+                xaxis_title="Hour", yaxis_title="Line Overloads (count)",
                 plot_bgcolor="white", paper_bgcolor="white",
                 legend=dict(orientation="h", y=1.05, x=0.5, xanchor="center", font=dict(family="Arial", size=11)),
                 font=dict(family="Arial", size=11)
@@ -724,7 +741,7 @@ if st.session_state.study_data:
         c3_.markdown(card_html("Transformer Overloads", str(bs.get('total_transformer_overloads', 0)), "Total across 24 hours"), unsafe_allow_html=True)
         c4_.markdown(card_html("Undervoltage Events", str(bs.get('total_undervoltage_buses', 0)), "Below 0.95 per-unit"), unsafe_allow_html=True)
 
-        # Grid stress score explanation
+        # Grid stress severity indicator
         stress = bs.get('grid_stress_score', 0)
         if stress > 3000:
             severity_txt = "Critical"
@@ -738,13 +755,9 @@ if st.session_state.study_data:
         else:
             severity_txt = "Low"
             sev_color = C_GREEN
-        st.markdown(f'''<div class="info-box">
-            <div style="font:400 0.82rem Arial;color:{C_DARK};line-height:1.7;">
-            <b style="color:{C1};">Grid Stress Score</b> is a composite metric combining all violation types:<br>
-            <span style="color:{C_GREY};font-size:0.78rem;">Formula: 20×convergence failures + 5×line overloads + 6×transformer overloads + 2×voltage violations</span><br><br>
-            <b>Severity scale:</b> 0 (no issues) → 300 (Low) → 1000 (Moderate) → 3000 (High) → 5000+ (Critical)<br>
-            Current assessment: <b style="color:{sev_color};">{severity_txt}</b> ({stress:.0f})
-            </div>
+        st.markdown(f'''<div style="font:400 0.85rem Arial;color:{C_DARK};margin:8px 0;">
+            Current severity: <b style="color:{sev_color};">{severity_txt}</b> (score: {stress:.0f})
+            &nbsp; <span style="font:400 0.72rem Arial;color:{C_GREY};">Scale: 0 (no issues) - 300 (Low) - 1000 (Moderate) - 3000 (High) - 5000+ (Critical)</span>
         </div>''', unsafe_allow_html=True)
 
         base_results = data.get("base_results", [])
@@ -806,10 +819,14 @@ if st.session_state.study_data:
 
             st.markdown(f'''<div class="info-box"><div style="font:400 0.85rem Arial;color:{C_DARK};line-height:1.9;">
                 • <b style="color:{C1};">Feeder Multiplier</b> scales all existing loads (morning and evening peaks, 3% annual growth)<br>
-                • <b style="color:{C1};">EV Demand</b> peaks 19:00–22:00 based on US residential charging research. Note: The Peak Demand Window (sidebar) controls when interventions are applied, not when EV naturally peaks<br>
-                • <b style="color:{C1};">Solar Generation</b> bell curve sunrise to sunset, reduces net demand at midday (SEIA 2024)<br>
-                • <b style="color:{C1};">Data Center</b> near-constant baseload at 97% utilization (DOE Grid Deployment Office 2024)
-            </div></div>''', unsafe_allow_html=True)
+                • <b style="color:{C1};">EV Demand</b> peaks 19:00-22:00 based on US residential charging research. Peak Demand Window (sidebar) controls when interventions are applied, not when EV naturally peaks<br>
+                • <b style="color:{C1};">Solar Generation</b> bell curve sunrise to sunset, reduces net demand at midday<br>
+                • <b style="color:{C1};">Data Center</b> near-constant baseload at 97% utilization
+                </div>
+                <div style="font:italic 400 0.68rem Arial;color:{C_GREY};margin-top:6px;">
+                Sources: EIA Annual Energy Outlook 2024 (EV growth), SEIA Solar Market Insight 2024 (solar adoption), DOE Grid Deployment Office 2024 (DC load patterns), FERC Form 1 (3% base growth consistent with 2020-2024 US distribution load growth of 2.5-3.5% annually).
+                </div>
+            </div>''', unsafe_allow_html=True)
 
     # ═══ MEMO ═════════════════════════════════════════════════════════════════
     with tab_memo:
@@ -817,7 +834,7 @@ if st.session_state.study_data:
         memo = data.get("memo", "")
         if memo:
             # Remove duplicate title since we have our own section header
-            memo_clean = memo.replace("# FeederIQ Planning Decision Memo\n", "").strip()
+            memo_clean = memo.replace("# FeederIQ Planning Decision Memo\n", "").replace("## Executive Summary\n", "").strip()
             st.markdown(f'<div class="memo-area">{memo_clean}</div>', unsafe_allow_html=True)
 
         st.markdown(f'<div class="sub-head">Agent Workflow Log</div>', unsafe_allow_html=True)
