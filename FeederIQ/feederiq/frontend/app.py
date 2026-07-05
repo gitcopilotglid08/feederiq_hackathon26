@@ -875,7 +875,7 @@ if st.session_state.study_data and not st.session_state.running:
         for cp in data.get("checkpoints", []):
             icon = "✅" if not cp.get("requires_approval") else "⚠️"
             st.markdown(f'''<div class="agent-row done"><span style="font-size:1rem;">{icon}</span>
-                <div><div class="name">{cp["step"].replace("_", " ").title()}</div><div class="detail">{cp["message"]}</div></div></div>''', unsafe_allow_html=True)
+                <div><div class="name">{cp["step"].replace("_", " ").title().replace("Nwa", "NWA")}</div><div class="detail">{cp["message"]}</div></div></div>''', unsafe_allow_html=True)
 
     st.markdown("---")
     if st.button("🔄  Start New Study"):
