@@ -29,7 +29,13 @@ def get_bedrock_client():
     """Get Bedrock runtime client. Returns None if credentials unavailable."""
     try:
         import boto3
-        client = boto3.client("bedrock-runtime", region_name=BEDROCK_REGION)
+        from botocore.config import Config
+        config = Config(
+            connect_timeout=5,
+            read_timeout=60,
+            retries={"max_attempts": 1}
+        )
+        client = boto3.client("bedrock-runtime", region_name=BEDROCK_REGION, config=config)
         return client
     except Exception as e:
         logger.warning(f"Bedrock client unavailable: {e}")

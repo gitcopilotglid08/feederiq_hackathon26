@@ -12,3 +12,4 @@ requests
 langgraph
 langchain-core
 boto3
+fpdf2

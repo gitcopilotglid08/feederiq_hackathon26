@@ -1,5 +1,22 @@
 # FeederIQ — Future Improvements & Data Roadmap
 
+## Recent Enhancements (R4 — July 2026)
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| Sigmoid grid relief scoring | Non-linear scoring using logistic normalization (EPRI methodology) | ✅ Done |
+| Min measures per portfolio | Backend + frontend support for minimum intervention count | ✅ Done |
+| PwC-style Score Breakdown | Dark gradient card with color-coded dimension scores | ✅ Done |
+| Impact Assessment cards | Red (before) / Green (after) colored cards | ✅ Done |
+| Topology-based stress viz | BFS propagation from overload sources along actual grid edges | ✅ Done |
+| Rankings sort-by-dimension | Sort portfolios by Grid Relief, Cost, Speed, or ESG individually | ✅ Done |
+| PDF memo download | Professional PDF with PwC branding, tables, colored workflow log | ✅ Done |
+| Info tooltips (EV, Solar) | Context-rich tooltips explaining time period and parameter meaning | ✅ Done |
+| LLM timeout optimization | 5s connect / 60s read / 1 retry boto3 config | ✅ Done |
+| Recommendation Agent animation | Dot-based scoring visualization for last agent step | ✅ Done |
+
+---
+
 ## Real-World Data Sources (for production deployment)
 
 ### Load Profiles

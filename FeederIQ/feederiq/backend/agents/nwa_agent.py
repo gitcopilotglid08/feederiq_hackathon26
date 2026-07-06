@@ -39,10 +39,11 @@ class NWAAgent:
         self.exclude = self.config.get("exclude_interventions", ["TransformerUpgrade"])
         self.max_measures = self.config.get("max_active_measures", 3)
 
-    def run(self, profiles, base_summary: dict, max_portfolios: int = 30, required_interventions: list = None) -> list:
+    def run(self, profiles, base_summary: dict, max_portfolios: int = 30, required_interventions: list = None, min_active_measures: int = 1) -> list:
         # Generate portfolios excluding interventions specified in instructions
         all_portfolios = generate_portfolios(
             max_active_measures=self.max_measures,
+            min_active_measures=min_active_measures,
             required_interventions=required_interventions
         )
         # Filter out excluded interventions (from instruction config)

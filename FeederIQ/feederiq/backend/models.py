@@ -9,6 +9,7 @@ class ScenarioRequest(BaseModel):
     dc_level: str = "Moderate"
     dc_timeline_label: str = "12m"
     max_active_measures: int = 3
+    min_active_measures: int = 1
     max_portfolios: Optional[int] = 60
     required_interventions: Optional[list] = None
     use_real_data: bool = False  # Toggle: use openEDI profiles vs synthetic curves

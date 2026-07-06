@@ -80,12 +80,22 @@ def card_html(label, value, sub=""):
     return f'<div class="card"><div class="lbl">{label}</div><div class="val">{value}</div>{sub_h}</div>'
 
 
-def score_bar_html(label, value, max_val=10):
+def score_bar_html(label, value, max_val=10, tooltip=""):
     pct = min(100, (value / max_val) * 100)
-    return f'''<div class="score-row">
+    # Color the bar based on score value
+    if value >= 8:
+        bar_color = "#1B8C3A"
+    elif value >= 6:
+        bar_color = "#7CB342"
+    elif value >= 4:
+        bar_color = "#E88D14"
+    else:
+        bar_color = "#C92A2A"
+    tip_html = f' title="{tooltip}"' if tooltip else ""
+    return f'''<div class="score-row"{tip_html}>
         <div class="lbl">{label}</div>
-        <div class="bar"><div class="fill" style="width:{pct}%"></div></div>
-        <div class="num">{value:.1f} / 10</div>
+        <div class="bar"><div class="fill" style="width:{pct}%;background:{bar_color};"></div></div>
+        <div class="num" style="color:{bar_color};">{value:.1f} / 10</div>
     </div>'''
 
 
@@ -180,13 +190,13 @@ def render_grid_map():
     ))
 
     for lbl, clr in [("Data Center", "#8B0000"), ("EV Charging", C1), ("Solar PV", C_GREEN), ("EV + Solar", "#7B2D8B")]:
-        fig.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(size=11, color=clr), name=lbl))
+        fig.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(size=11, color=clr), name=f"<b>{lbl}</b>"))
 
     fig.update_layout(
         height=380, margin=dict(t=30, b=5, l=5, r=5),
         plot_bgcolor='#F8F8F8', paper_bgcolor='white',
         xaxis=dict(visible=False), yaxis=dict(visible=False),
-        legend=dict(orientation="h", y=1.02, x=0.5, xanchor="center", font=dict(size=11, family="Arial")),
+        legend=dict(orientation="h", y=1.02, x=0.5, xanchor="center", font=dict(size=11, family="Arial", color=C_DARK)),
         shapes=[dict(type="rect", x0=min(xs)-30, y0=min(ys)-30, x1=max(xs)+30, y1=max(ys)+30,
                      line=dict(color=C_DARK, width=1), fillcolor="rgba(0,0,0,0)")]
     )
@@ -194,7 +204,13 @@ def render_grid_map():
 
 
 def render_before_after_map(improvement_pct):
-    """Render side-by-side grid maps: red (stressed) vs green (after intervention)."""
+    """Render side-by-side grid maps using actual feeder topology.
+    
+    Stress propagation follows electrical distance from overload sources
+    (EV buses, DC bus) along the actual line connections in master_lite.dss.
+    This ensures the before/after visualization matches the network topology
+    shown in the main grid map.
+    """
     from pathlib import Path
     coords_path = Path(__file__).resolve().parent.parent.parent / "ai_synthetic_data" / "Buscoords.dss"
     if not coords_path.exists():
@@ -212,15 +228,56 @@ def render_before_after_map(improvement_pct):
                     continue
     primary = {k: v for k, v in buses.items() if not k.startswith("s") and not k.endswith("r")}
 
-    # Simulate "stressed" buses (near EV/DC locations get red)
     ev_buses = {"60", "83", "90", "92", "114"}
     solar_buses = {"66", "80", "92", "104", "110"}
     dc_bus = "67"
-    stressed_buses = ev_buses | {dc_bus} | {"13", "18", "21", "23", "25", "28", "29", "30"}  # downstream of DC
+    overload_sources = ev_buses | {dc_bus}
+
+    # Build adjacency from actual line connections
+    edges = parse_line_connections()
+    adjacency = {}
+    for b1, b2 in edges:
+        if b1 in primary and b2 in primary:
+            adjacency.setdefault(b1, set()).add(b2)
+            adjacency.setdefault(b2, set()).add(b1)
+
+    # BFS from overload sources to find electrically close buses (stress propagation)
+    stressed_buses = set()
+    stress_distance = {}  # bus -> hop distance from nearest source
+    from collections import deque
+    queue = deque()
+    for src in overload_sources:
+        if src in primary:
+            queue.append((src, 0))
+            stress_distance[src] = 0
+            stressed_buses.add(src)
+
+    max_hops = 3  # stress propagates up to 3 hops electrically
+    while queue:
+        bus, dist = queue.popleft()
+        if dist >= max_hops:
+            continue
+        for neighbor in adjacency.get(bus, []):
+            if neighbor not in stress_distance:
+                stress_distance[neighbor] = dist + 1
+                stressed_buses.add(neighbor)
+                queue.append((neighbor, dist + 1))
 
     from plotly.subplots import make_subplots
-    fig = make_subplots(rows=1, cols=2, subplot_titles=["Before (Baseline)", "After (Intervention)"],
+    fig = make_subplots(rows=1, cols=2, subplot_titles=["<b>Before (Baseline)</b>", "<b>After (Intervention)</b>"],
                         horizontal_spacing=0.05)
+
+    # Draw topology lines on both panels
+    for col in [1, 2]:
+        for b1, b2 in edges:
+            if b1 in primary and b2 in primary:
+                x0, y0 = primary[b1]
+                x1, y1 = primary[b2]
+                fig.add_trace(go.Scatter(
+                    x=[x0, x1, None], y=[y0, y1, None],
+                    mode='lines', line=dict(color='#DDDDDD', width=0.8),
+                    hoverinfo='skip', showlegend=False
+                ), row=1, col=col)
 
     for col, is_after in [(1, False), (2, True)]:
         xs, ys, colors, sizes = [], [], [], []
@@ -228,35 +285,53 @@ def render_before_after_map(improvement_pct):
             xs.append(x)
             ys.append(y)
             if is_after:
-                # After: most nodes green, some yellow (residual)
-                if bus in stressed_buses and improvement_pct < 80:
-                    colors.append("#E88D14")  # partially resolved
-                    sizes.append(9)
+                # After: color based on whether stress is resolved
+                if bus in stressed_buses:
+                    dist = stress_distance.get(bus, 0)
+                    if improvement_pct >= 80:
+                        colors.append(C_GREEN)
+                        sizes.append(7)
+                    elif improvement_pct >= 40 or dist >= 2:
+                        colors.append("#E88D14")  # partially resolved
+                        sizes.append(8)
+                    else:
+                        colors.append(C_GREEN if dist >= 2 else "#E88D14")
+                        sizes.append(8)
                 else:
                     colors.append(C_GREEN)
-                    sizes.append(7)
+                    sizes.append(6)
             else:
-                # Before: stressed nodes red
+                # Before: color by stress intensity (distance from source)
                 if bus == dc_bus:
                     colors.append("#8B0000")
                     sizes.append(14)
-                elif bus in stressed_buses:
+                elif bus in overload_sources:
                     colors.append(C_RED)
-                    sizes.append(10)
-                elif bus in ev_buses:
-                    colors.append(C1)
-                    sizes.append(9)
+                    sizes.append(11)
+                elif bus in stressed_buses:
+                    dist = stress_distance.get(bus, 3)
+                    if dist == 1:
+                        colors.append(C_RED)
+                        sizes.append(9)
+                    elif dist == 2:
+                        colors.append(C1)
+                        sizes.append(7)
+                    else:
+                        colors.append(C2)
+                        sizes.append(6)
                 else:
-                    colors.append("#AAAAAA")
-                    sizes.append(5)
+                    colors.append("#BBBBBB")
+                    sizes.append(4)
 
         fig.add_trace(go.Scatter(x=xs, y=ys, mode='markers',
                                   marker=dict(size=sizes, color=colors, line=dict(width=0.5, color='white')),
                                   showlegend=False, hoverinfo='skip'), row=1, col=col)
 
-    fig.update_layout(height=280, margin=dict(t=30, b=5, l=5, r=5),
+    fig.update_layout(height=280, margin=dict(t=35, b=5, l=5, r=5),
                       plot_bgcolor='#F8F8F8', paper_bgcolor='white',
                       font=dict(family="Arial", size=10))
+    # Make subplot titles smaller and bold (already using <b> tags above)
+    fig.update_annotations(font_size=11, font_family="Arial")
     fig.update_xaxes(visible=False)
     fig.update_yaxes(visible=False)
     return fig
@@ -289,20 +364,18 @@ with st.sidebar:
     else:
         st.caption("Parametric synthetic profiles (math-generated 24h curves)")
 
-    st.markdown(f'<div class="sidebar-section"><b>⚡ EV Growth</b></div>', unsafe_allow_html=True)
     ev_options = ["Low (15% annually)", "Base (20% annually)", "High (25% annually)", "Custom"]
-    ev_choice = st.selectbox("EV Growth", ev_options, index=1, label_visibility="collapsed",
-                             help="EIA AEO 2024: 15-25% annual EV adoption growth through 2030.")
+    ev_choice = st.selectbox("⚡ EV Growth", ev_options, index=1,
+                             help="Projected annual growth rate in EV charging demand on this feeder. Low/Base/High represent 15%/20%/25% compound annual growth respectively.\n\n**Time period:** This rate compounds over the selected planning horizon. E.g. 'Base (20%)' over 12 months = 20% more EV load; over 3 years = ~73% cumulative growth.\n\n**Source:** EIA Annual Energy Outlook 2024 (15-25% range through 2030).")
     ev_level_map = {"Low (15% annually)": "Low", "Base (20% annually)": "Base", "High (25% annually)": "High"}
     ev_level = ev_level_map.get(ev_choice, "Base")
     if ev_choice == "Custom":
         ev_custom = st.number_input("Custom EV growth %", min_value=5, max_value=50, value=20, step=1, key="evc")
         ev_level = "Base"
 
-    st.markdown(f'<div class="sidebar-section"><b>☀️ Solar Adoption</b></div>', unsafe_allow_html=True)
     solar_options = ["Low (1 MW)", "Base (2 MW)", "High (3 MW)", "Custom"]
-    solar_choice = st.selectbox("Solar Adoption", solar_options, index=1, label_visibility="collapsed",
-                                help="SEIA Q1 2024: Feeder-equivalent MW of distributed solar adoption.")
+    solar_choice = st.selectbox("☀️ Solar Adoption", solar_options, index=1,
+                                help="Total distributed solar PV capacity expected on this feeder. Low/Base/High represent 1/2/3 MW of cumulative installed rooftop and community solar.\n\n**Time period:** This is the total capacity at the END of the planning horizon — not an annual addition. 'Base (2 MW)' means 2 MW total DER by the horizon date regardless of whether the horizon is 6 months or 5 years.\n\n**Source:** SEIA Solar Market Insight Q1 2024.")
     solar_level_map = {"Low (1 MW)": "Low", "Base (2 MW)": "Base", "High (3 MW)": "High"}
     solar_level = solar_level_map.get(solar_choice, "Base")
     if solar_choice == "Custom":
@@ -336,7 +409,15 @@ with st.sidebar:
     max_portfolios = st.slider("count", 10, 120, 60, step=10, label_visibility="collapsed")
 
     st.markdown(f'<div class="sidebar-section"><b>Max Measures per Portfolio</b></div>', unsafe_allow_html=True)
-    max_active = st.slider("measures", 1, 5, 3, label_visibility="collapsed")
+    max_active = st.slider("measures", 1, 5, 3, label_visibility="collapsed",
+                           help="Maximum number of different interventions that can be combined in a single portfolio. Higher values explore more complex solutions but increase computation time.")
+
+    st.markdown(f'<div class="sidebar-section"><b>Min Measures per Portfolio</b></div>', unsafe_allow_html=True)
+    min_active = st.slider("min measures", 1, 5, 1, label_visibility="collapsed",
+                           help="Minimum number of interventions required in each portfolio. Set > 1 to exclude single-measure solutions and focus on combined approaches.")
+    if min_active > max_active:
+        st.warning("Min measures cannot exceed max measures. Using max value.")
+        min_active = max_active
 
     st.markdown(f'<div class="sidebar-section"><b>🎯 Solution Preferences</b> <span class="optional-tag">(optional)</span></div>', unsafe_allow_html=True)
     filter_mode = st.radio("Filter mode", ["Must include", "Only these"], index=0,
@@ -408,6 +489,7 @@ if st.session_state.running and st.session_state.study_data is None:
         "dc_level": dc_level,
         "dc_timeline_label": dc_timeline,
         "max_active_measures": max_active,
+        "min_active_measures": min_active,
         "max_portfolios": max_portfolios,
         "required_interventions": req_interventions if req_interventions else None,
         "use_real_data": use_real_data,
@@ -422,7 +504,18 @@ if st.session_state.running and st.session_state.study_data is None:
                 if j < i:
                     html += f'<div class="agent-row done"><span style="font-size:1.1rem;">{ic}</span><div><div class="name">{nm}</div><div class="detail">✓ Complete</div></div></div>'
                 elif j == i:
-                    html += f'<div class="agent-row running"><span style="font-size:1.1rem;">{ic}</span><div><div class="name">{nm}</div><div class="detail">{dt}</div><div style="margin-top:4px;height:4px;background:#EFEFEF;border-radius:2px;width:200px;"><div style="height:4px;background:{C1};border-radius:2px;width:{pct}%;"></div></div></div></div>'
+                    if j == 5:  # Recommendation Agent - special animation
+                        # Animated scoring visualization
+                        dots = "●" * (pct // 10) + "○" * (10 - pct // 10)
+                        score_preview = f"{pct / 12.5:.1f}" if pct > 20 else "..."
+                        html += f'''<div class="agent-row running"><span style="font-size:1.1rem;">{ic}</span><div>
+                            <div class="name">{nm}</div>
+                            <div class="detail">{dt}</div>
+                            <div style="margin-top:6px;font:600 0.75rem monospace;color:{C1};letter-spacing:2px;">{dots}</div>
+                            <div style="font:400 0.65rem Arial;color:{C_GREY};margin-top:3px;">Ranking portfolios... Score convergence: {score_preview}</div>
+                        </div></div>'''
+                    else:
+                        html += f'<div class="agent-row running"><span style="font-size:1.1rem;">{ic}</span><div><div class="name">{nm}</div><div class="detail">{dt}</div><div style="margin-top:4px;height:4px;background:#EFEFEF;border-radius:2px;width:200px;"><div style="height:4px;background:{C1};border-radius:2px;width:{pct}%;"></div></div></div></div>'
                 else:
                     html += f'<div class="agent-row"><span style="font-size:1.1rem;">{ic}</span><div><div class="name">{nm}</div><div class="detail">{dt}</div></div></div>'
             agent_container.markdown(html, unsafe_allow_html=True)
@@ -442,10 +535,16 @@ if st.session_state.running and st.session_state.study_data is None:
     progress.progress(1.0)
     # Show agent summaries from actual results
     study = st.session_state.study_data
+    if not study or not study.get("ranking"):
+        st.error("Study returned empty results. Please check backend logs.")
+        st.session_state.running = False
+        st.session_state.study_data = None
+        st.stop()
+
     bs = study.get("base_summary", {})
     top_rec = study.get("top_recommendation", {})
     agent_summaries = [
-        f"✓ Profiles generated. Data source: {study.get('scenario', {}).get('use_real_data', 'synthetic')}",
+        f"✓ Profiles generated. Data source: {'Real (openEDI)' if study.get('scenario', {}).get('use_real_data') else 'Synthetic'}",
         f"✓ 24-hour power flow complete. Feeder: IEEE 123-bus.",
         f"✓ Grid stress: {bs.get('grid_stress_score', 0):.0f}. Line overloads: {bs.get('total_line_overloads', 0)}. Transformer overloads: {bs.get('total_transformer_overloads', 0)}.",
         f"✓ Best NWA: {top_rec.get('portfolio_name', 'N/A') if top_rec.get('TransformerUpgrade', 0) == 0 else 'Evaluated'}. {len(study.get('ranking', []))} portfolios scored.",
@@ -461,32 +560,10 @@ if st.session_state.running and st.session_state.study_data is None:
     if st.button("▶  View Results", key="view_results_btn"):
         st.session_state.running = False
         st.rerun()
-
-# Show agent summaries page (after rerun, running=True but data exists)
-elif st.session_state.running and st.session_state.study_data:
-    st.markdown('<div class="sec-head">Agent Execution - Complete</div>', unsafe_allow_html=True)
-    study = st.session_state.study_data
-    bs = study.get("base_summary", {})
-    top_rec = study.get("top_recommendation", {})
-    agents_done = [
-        ("🔬", "Scenario Agent", f"✓ Profiles generated."),
-        ("⚡", "Simulation Agent", f"✓ 24-hour power flow complete."),
-        ("🔍", "Constraint Agent", f"✓ Grid stress: {bs.get('grid_stress_score', 0):.0f}. Overloads: {bs.get('total_line_overloads', 0)} lines, {bs.get('total_transformer_overloads', 0)} transformers."),
-        ("🌱", "NWA Agent", f"✓ {len(study.get('ranking', []))} portfolios scored."),
-        ("🔧", "Capex Agent", f"✓ Capex options evaluated."),
-        ("📊", "Recommendation Agent", f"✓ Top: {top_rec.get('portfolio_name', 'N/A')} (score: {top_rec.get('final_score', 0):.2f})"),
-    ]
-    html = ""
-    for ic, nm, detail in agents_done:
-        html += f'<div class="agent-row done"><span style="font-size:1.1rem;">{ic}</span><div><div class="name">{nm}</div><div class="detail">{detail}</div></div></div>'
-    st.markdown(html, unsafe_allow_html=True)
-    st.success("✅ All agents completed. Review summaries above, then view results.")
-    if st.button("▶  View Results", key="view_results_btn2"):
-        st.session_state.running = False
-        st.rerun()
+    st.stop()  # Prevent anything below from rendering while on this page
 
 # ── Results ───────────────────────────────────────────────────────────────────
-if st.session_state.study_data and not st.session_state.running:
+if st.session_state.study_data:
     data = st.session_state.study_data
     ranking = data.get("ranking", [])
 
@@ -520,24 +597,6 @@ if st.session_state.study_data and not st.session_state.running:
 
     # ═══ RECOMMENDATION ═══════════════════════════════════════════════════════
     with tab_rec:
-        # Score scale graphic above recommendation
-        st.markdown(f'''<div style="background:#F5F5F5;border-radius:6px;padding:10px 16px;margin-bottom:14px;">
-            <div style="font:600 0.78rem Arial;color:{C_DARK};margin-bottom:6px;">Final score is a weighted sum of Grid Relief (40%), Cost Efficiency (25%), Speed to Value (20%), and ESG (15%)</div>
-            <div style="display:flex;align-items:center;gap:0;height:14px;border-radius:7px;overflow:hidden;">
-                <div style="flex:1;background:#C92A2A;height:100%;"></div>
-                <div style="flex:1;background:#E06030;height:100%;"></div>
-                <div style="flex:1;background:#E88D14;height:100%;"></div>
-                <div style="flex:1;background:#D4A017;height:100%;"></div>
-                <div style="flex:1;background:#7CB342;height:100%;"></div>
-                <div style="flex:1;background:#1B8C3A;height:100%;"></div>
-            </div>
-            <div style="display:flex;justify-content:space-between;margin-top:4px;">
-                <span style="font:600 0.7rem Arial;color:{C_GREY};">0 - No improvement</span>
-                <span style="font:600 0.7rem Arial;color:{C_GREY};">5 - Moderate</span>
-                <span style="font:600 0.7rem Arial;color:{C_GREY};">10 - Fully resolved</span>
-            </div>
-        </div>''', unsafe_allow_html=True)
-
         st.markdown('<div class="sec-head">Recommended Solution</div>', unsafe_allow_html=True)
 
         top10 = ranking[:10]
@@ -572,33 +631,61 @@ if st.session_state.study_data and not st.session_state.running:
             </div>
         </div>''', unsafe_allow_html=True)
 
-        st.markdown(f'<div class="sub-head">Score Breakdown</div>', unsafe_allow_html=True)
-        col_bars, col_radar = st.columns([1, 1])
+        # Score scale graphic (moved below solution card per feedback)
+        st.markdown(f'''<div style="background:#F5F5F5;border-radius:6px;padding:10px 16px;margin-bottom:14px;">
+            <div style="font:600 0.78rem Arial;color:{C_DARK};margin-bottom:6px;">Final score is a weighted sum of Grid Relief, Cost Efficiency, Speed to Value, and ESG</div>
+            <div style="display:flex;align-items:center;gap:0;height:14px;border-radius:7px;overflow:hidden;">
+                <div style="flex:1;background:#C92A2A;height:100%;"></div>
+                <div style="flex:1;background:#E06030;height:100%;"></div>
+                <div style="flex:1;background:#E88D14;height:100%;"></div>
+                <div style="flex:1;background:#D4A017;height:100%;"></div>
+                <div style="flex:1;background:#7CB342;height:100%;"></div>
+                <div style="flex:1;background:#1B8C3A;height:100%;"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:4px;">
+                <span style="font:600 0.7rem Arial;color:{C_GREY};">0 - No improvement</span>
+                <span style="font:600 0.7rem Arial;color:{C_GREY};">5 - Moderate</span>
+                <span style="font:600 0.7rem Arial;color:{C_GREY};">10 - Fully resolved</span>
+            </div>
+        </div>''', unsafe_allow_html=True)
 
+        # Extract scores for display
         grid_relief = selected.get("grid_relief_score", selected.get("technical_score", 0))
         cost_sc = selected.get("cost_score", 0)
         speed_sc = selected.get("speed_to_value_score", (selected.get("feasibility_score", 0) + selected.get("deployment_score", 0)) / 2)
         esg_sc = selected.get("esg_score", 8)
 
-        with col_bars:
-            st.markdown(
-                score_bar_html("Grid Relief (40%)", grid_relief) +
-                score_bar_html("Cost Efficiency (25%)", cost_sc) +
-                score_bar_html("Speed to Value (20%)", speed_sc) +
-                score_bar_html("ESG Alignment (15%)", esg_sc),
-                unsafe_allow_html=True)
-            st.markdown(f'''<div class="info-box">
-                <div style="font:400 0.78rem Arial;color:{C_DARK};line-height:1.6;">
-                • <b style="color:{C1};">Grid Relief</b> - % Reduction in overloads and voltage violations<br>
-                • <b style="color:{C1};">Cost Efficiency</b> - Lower cost relative to full capex alternatives<br>
-                • <b style="color:{C1};">Speed to Value</b> - Combined feasibility and deployment timeline<br>
-                • <b style="color:{C1};">ESG Alignment</b> - Lower carbon, less material intensity
+        # Score Breakdown with distinct styling (dark background, white text)
+        st.markdown(f'''<div style="background:linear-gradient(135deg, #2D2D2D 0%, #3D3D3D 100%);border-radius:8px;padding:14px 16px;margin-bottom:12px;border-left:4px solid {C1};">
+            <div style="font:700 0.95rem Arial;color:white;margin-bottom:10px;">Score Breakdown</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                <div style="background:rgba(255,255,255,0.08);border-radius:6px;padding:8px 12px;" title="Measures % reduction in grid stress. Scored using sigmoid normalization (0-10) where raw improvement % is mapped non-linearly. This portfolio: {selected.get('technical_improvement_pct', 0):.1f}% reduction.">
+                    <div style="font:600 0.72rem Arial;color:rgba(255,255,255,0.7);">Grid Relief</div>
+                    <div style="font:800 1.2rem Arial;color:{("#1B8C3A" if grid_relief >= 7 else (C2 if grid_relief >= 4 else C_RED))};margin-top:2px;">{grid_relief:.1f}<span style="font:400 0.7rem Arial;color:rgba(255,255,255,0.4);"> / 10</span></div>
+                    <div style="font:400 0.62rem Arial;color:rgba(255,255,255,0.45);margin-top:2px;">{selected.get('technical_improvement_pct', 0):.1f}% stress reduction</div>
                 </div>
-                <div style="font:italic 400 0.68rem Arial;color:{C_GREY};margin-top:4px;">*CPUC IRP (D.22-02-004) and NY REV BCA methodology.</div>
-            </div>''', unsafe_allow_html=True)
+                <div style="background:rgba(255,255,255,0.08);border-radius:6px;padding:8px 12px;" title="Implementation cost relative to full capex. Score = 10 x (1 - cost/max_cost). Lower cost = higher score.">
+                    <div style="font:600 0.72rem Arial;color:rgba(255,255,255,0.7);">Cost Efficiency</div>
+                    <div style="font:800 1.2rem Arial;color:{("#1B8C3A" if cost_sc >= 7 else (C2 if cost_sc >= 4 else C_RED))};margin-top:2px;">{cost_sc:.1f}<span style="font:400 0.7rem Arial;color:rgba(255,255,255,0.4);"> / 10</span></div>
+                    <div style="font:400 0.62rem Arial;color:rgba(255,255,255,0.45);margin-top:2px;">vs. full capex baseline</div>
+                </div>
+                <div style="background:rgba(255,255,255,0.08);border-radius:6px;padding:8px 12px;" title="Average of feasibility (barriers) and deployment speed (months to operational). Software/behavioral measures score highest.">
+                    <div style="font:600 0.72rem Arial;color:rgba(255,255,255,0.7);">Speed to Value</div>
+                    <div style="font:800 1.2rem Arial;color:{("#1B8C3A" if speed_sc >= 7 else (C2 if speed_sc >= 4 else C_RED))};margin-top:2px;">{speed_sc:.1f}<span style="font:400 0.7rem Arial;color:rgba(255,255,255,0.4);"> / 10</span></div>
+                    <div style="font:400 0.62rem Arial;color:rgba(255,255,255,0.45);margin-top:2px;">Feasibility + deployment</div>
+                </div>
+                <div style="background:rgba(255,255,255,0.08);border-radius:6px;padding:8px 12px;" title="Sustainability benefit per CPUC IRP and NY REV BCA. Behavioral solutions score highest, physical infrastructure lowest.">
+                    <div style="font:600 0.72rem Arial;color:rgba(255,255,255,0.7);">ESG Alignment</div>
+                    <div style="font:800 1.2rem Arial;color:{("#1B8C3A" if esg_sc >= 7 else (C2 if esg_sc >= 4 else C_RED))};margin-top:2px;">{esg_sc:.1f}<span style="font:400 0.7rem Arial;color:rgba(255,255,255,0.4);"> / 10</span></div>
+                    <div style="font:400 0.62rem Arial;color:rgba(255,255,255,0.45);margin-top:2px;">Sustainability benefit</div>
+                </div>
+            </div>
+        </div>''', unsafe_allow_html=True)
 
-        with col_radar:
-            cats = ['Grid Relief', 'Cost', 'Speed', 'ESG']
+        # Radar chart comparison
+        col_spacer, col_radar_center, col_spacer2 = st.columns([1, 2, 1])
+        with col_radar_center:
+            cats = ['<b>Grid Relief</b>', '<b>Cost</b>', '<b>Speed</b>', '<b>ESG</b>']
             vals = [grid_relief, cost_sc, speed_sc, esg_sc]
             fig = go.Figure()
             fig.add_trace(go.Scatterpolar(
@@ -615,7 +702,7 @@ if st.session_state.study_data and not st.session_state.running:
                 ]
                 fig.add_trace(go.Scatterpolar(
                     r=r_vals + [r_vals[0]], theta=cats + [cats[0]], fill='toself',
-                    fillcolor='rgba(100,100,100,0.04)', line=dict(color=C_GREY, width=1.5, dash='dot'), name="Comparison"
+                    fillcolor='rgba(100,100,100,0.06)', line=dict(color='#999999', width=1.5, dash='dash'), name="Runner-up"
                 ))
             fig.update_layout(
                 polar=dict(radialaxis=dict(visible=True, range=[0, 10], tickfont=dict(size=9, family="Arial"))),
@@ -626,7 +713,7 @@ if st.session_state.study_data and not st.session_state.running:
             st.plotly_chart(fig, use_container_width=True)
 
         # Impact Assessment
-        st.markdown(f'<div class="sub-head">Impact Assessment</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="sub-head">Impact Assessment (Grid Relief)</div>', unsafe_allow_html=True)
         st.caption("Grid stress comparison before and after applying the selected solution.")
         bs = data.get("base_summary", {})
         impr = selected.get("technical_improvement_pct", 0)
@@ -639,38 +726,29 @@ if st.session_state.study_data and not st.session_state.running:
         elif stress_val > 300: sev_txt, sev_clr = "Moderate", C2
         else: sev_txt, sev_clr = "Low", C_GREEN
         st.markdown(f'''<div style="font:400 0.82rem Arial;color:{C_DARK};margin-bottom:8px;">
-            Current severity: <b style="color:{sev_clr};">{sev_txt}</b> (score: {stress_val:.0f})
+            <b>Current severity:</b> <b style="color:{sev_clr};">{sev_txt}</b> (score: {stress_val:.0f})
             &nbsp; <span style="font:400 0.7rem Arial;color:{C_GREY};">Scale: 0 (no issues) - 300 (Low) - 1000 (Moderate) - 3000 (High) - 5000+ (Critical)</span>
         </div>''', unsafe_allow_html=True)
 
         ba1, ba2, ba3 = st.columns(3)
-        ba1.markdown(card_html("Before (No Intervention)", f"{bs.get('grid_stress_score', 0):.0f}", "Grid stress score"), unsafe_allow_html=True)
-        ba2.markdown(card_html("After (Selected Solution)", f"{after_stress:.0f}", f"↓ {impr:.1f}% reduction"), unsafe_allow_html=True)
+        ba1.markdown(f'''<div class="card" style="border-left:4px solid {C_RED};background:#FFF5F5;">
+            <div class="lbl">Before (No Intervention)</div>
+            <div class="val">{bs.get('grid_stress_score', 0):.0f}</div>
+            <div class="sub">Grid stress score</div>
+        </div>''', unsafe_allow_html=True)
+        ba2.markdown(f'''<div class="card" style="border-left:4px solid {C_GREEN};background:#F0FFF4;">
+            <div class="lbl">After (Selected Solution)</div>
+            <div class="val">{after_stress:.0f}</div>
+            <div class="sub">↓ {impr:.1f}% reduction</div>
+        </div>''', unsafe_allow_html=True)
         ba3.markdown(card_html("Technical Improvement", f"{impr:.1f}%", "Overload and violation reduction"), unsafe_allow_html=True)
 
         # Before/After Grid Map
-        st.markdown(f'<div class="sub-head">Grid Stress Visualization</div>', unsafe_allow_html=True)
+        st.markdown(f'<div style="font:700 0.82rem Arial,sans-serif;color:{C_DARK};margin:14px 0 5px;">Grid Stress Visualization</div>', unsafe_allow_html=True)
         st.caption("Red nodes indicate stressed equipment. Green indicates resolved. Orange indicates partially resolved.")
         ba_map = render_before_after_map(impr)
         if ba_map:
             st.plotly_chart(ba_map, use_container_width=True)
-
-        # Grid stress formula (with help icon)
-        with st.expander("ℹ️ How is Grid Stress Score calculated?"):
-            st.markdown(f'''<div style="font:400 0.85rem Arial;color:{C_DARK};line-height:2;">
-                <div style="background:#F9F9F9;border-radius:6px;padding:12px 16px;border:1px solid #EBEBEB;font-family:monospace;font-size:0.85rem;margin-bottom:8px;">
-                    Grid Stress = <b style="color:{C_RED};">20</b> x convergence failures
-                    + <b style="color:{C1};">5</b> x line overloads
-                    + <b style="color:{C1};">6</b> x transformer overloads
-                    + <b style="color:{C2};">2</b> x voltage violations
-                </div>
-                <div style="font:400 0.78rem Arial;color:{C_GREY};">
-                    Weights reflect severity: convergence failures (grid infeasible) are most critical (x20),
-                    transformer overloads (costly asset damage risk, 18-36 month replacement) weighted x6,
-                    line overloads (thermal risk, easier to repair) x5, voltage violations (quality-of-service) x2.
-                    Based on IEEE C57.91 transformer loading guide and ANSI C84.1 voltage standards.
-                </div>
-            </div>''', unsafe_allow_html=True)
 
         # Hourly comparison with non-uniform reduction (stronger during peak)
         base_results = data.get("base_results", [])
@@ -699,14 +777,16 @@ if st.session_state.study_data and not st.session_state.running:
             after_lines = (br_df["num_overloaded_lines"] * (1 - reduction)).clip(lower=0).astype(int)
 
             fig_comp = go.Figure()
-            fig_comp.add_trace(go.Bar(x=br_df["time"], y=br_df["num_overloaded_lines"], name="Baseline", marker_color=C1, opacity=0.75))
-            fig_comp.add_trace(go.Bar(x=br_df["time"], y=after_lines, name="After Intervention", marker_color=C_GREEN, opacity=0.75))
+            fig_comp.add_trace(go.Bar(x=br_df["time"], y=br_df["num_overloaded_lines"], name="<b>Baseline</b>", marker_color=C1, opacity=0.75))
+            fig_comp.add_trace(go.Bar(x=br_df["time"], y=after_lines, name="<b>After Intervention</b>", marker_color=C_GREEN, opacity=0.75))
             fig_comp.update_layout(
                 barmode="group", height=250, margin=dict(t=10, b=30),
-                xaxis_title="Hour", yaxis_title="Line Overloads (count)",
+                xaxis_title="<b>Hour</b>", yaxis_title="<b>Line Overloads (count)</b>",
                 plot_bgcolor="white", paper_bgcolor="white",
-                legend=dict(orientation="h", y=1.05, x=0.5, xanchor="center", font=dict(family="Arial", size=11)),
-                font=dict(family="Arial", size=11)
+                legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center", font=dict(family="Arial", size=11, color=C_DARK)),
+                font=dict(family="Arial", size=11),
+                xaxis=dict(title_font=dict(size=10, family="Arial")),
+                yaxis=dict(title_font=dict(size=10, family="Arial")),
             )
             st.plotly_chart(fig_comp, use_container_width=True)
 
@@ -715,7 +795,23 @@ if st.session_state.study_data and not st.session_state.running:
         st.markdown('<div class="sec-head">Portfolio Rankings</div>', unsafe_allow_html=True)
         st.caption("All solutions ranked by weighted score. Score range: 0 (worst) to 10 (best).")
 
-        for idx, row in enumerate(ranking[:3]):
+        # Sort-by selector (item 9)
+        sort_options = {
+            "Overall Score": "final_score",
+            "Grid Relief": "grid_relief_score",
+            "Cost Efficiency": "cost_score",
+            "Speed to Value": "speed_to_value_score",
+            "ESG Alignment": "esg_score",
+        }
+        sort_choice = st.selectbox("Sort by", list(sort_options.keys()), index=0,
+                                   help="Re-rank portfolios by a single dimension to see the best option for that specific criterion.")
+        sort_key = sort_options[sort_choice]
+
+        # Re-sort ranking by selected dimension
+        ranking_sorted = sorted(ranking, key=lambda r: r.get(sort_key, 0), reverse=True)
+
+        for idx, row in enumerate(ranking_sorted[:3]):
+            badges = ["🥇", "🥈", "🥉"]
             badges = ["🥇", "🥈", "🥉"]
             cls = "rank-card top" if idx == 0 else "rank-card"
             speed_val = row.get("speed_to_value_score", (row.get("feasibility_score", 0) + row.get("deployment_score", 0)) / 2)
@@ -738,15 +834,16 @@ if st.session_state.study_data and not st.session_state.running:
                 </div>
             </div>''', unsafe_allow_html=True)
 
-        if len(ranking) > 3:
-            top_n = min(10, len(ranking))
-            chart_data = ranking[:top_n]
+        if len(ranking_sorted) > 3:
+            top_n = min(10, len(ranking_sorted))
+            chart_data = ranking_sorted[:top_n]
             fig_bar = go.Figure()
             fig_bar.add_trace(go.Bar(
                 y=[r["portfolio_name"] for r in chart_data][::-1],
                 x=[r["final_score"] for r in chart_data][::-1],
                 orientation='h', marker_color=[C1 if i == top_n - 1 else C2 for i in range(top_n)],
-                text=[f'{r["final_score"]:.2f}' for r in chart_data][::-1], textposition='outside'
+                text=[f'<b>{r["final_score"]:.2f}</b>' for r in chart_data][::-1], textposition='inside',
+                insidetextanchor='middle', textfont=dict(color='white', size=11, family='Arial')
             ))
             fig_bar.update_layout(
                 height=max(250, top_n * 36), margin=dict(t=10, l=260, b=20, r=40),
@@ -757,7 +854,7 @@ if st.session_state.study_data and not st.session_state.running:
             st.plotly_chart(fig_bar, use_container_width=True)
 
         st.markdown(f'<div class="sub-head">Full Results</div>', unsafe_allow_html=True)
-        rank_df = pd.DataFrame(ranking)
+        rank_df = pd.DataFrame(ranking_sorted)
         if "speed_to_value_score" not in rank_df.columns and "feasibility_score" in rank_df.columns:
             rank_df["speed_to_value_score"] = (rank_df["feasibility_score"] + rank_df["deployment_score"]) / 2
         display_cols = [c for c in ["portfolio_name", "final_score", "technical_improvement_pct", "cost_score", "speed_to_value_score", "esg_score"] if c in rank_df.columns]
@@ -790,7 +887,7 @@ if st.session_state.study_data and not st.session_state.running:
             severity_txt = "Low"
             sev_color = C_GREEN
         st.markdown(f'''<div style="font:400 0.85rem Arial;color:{C_DARK};margin:8px 0;">
-            Current severity: <b style="color:{sev_color};">{severity_txt}</b> (score: {stress:.0f})
+            <b>Current severity:</b> <b style="color:{sev_color};">{severity_txt}</b> (score: {stress:.0f})
             &nbsp; <span style="font:400 0.72rem Arial;color:{C_GREY};">Scale: 0 (no issues) - 300 (Low) - 1000 (Moderate) - 3000 (High) - 5000+ (Critical)</span>
         </div>''', unsafe_allow_html=True)
 
@@ -800,15 +897,17 @@ if st.session_state.study_data and not st.session_state.running:
             st.caption("Stacked equipment overloads and voltage violations at each hour.")
             br_df = pd.DataFrame(base_results)
             fig2 = go.Figure()
-            fig2.add_trace(go.Bar(x=br_df["time"], y=br_df["num_overloaded_lines"], name="Line Overloads", marker_color=C1))
-            fig2.add_trace(go.Bar(x=br_df["time"], y=br_df["num_overloaded_transformers"], name="Transformer Overloads", marker_color=C2))
-            fig2.add_trace(go.Bar(x=br_df["time"], y=br_df["undervoltage_buses"], name="Undervoltage", marker_color=C_RED))
+            fig2.add_trace(go.Bar(x=br_df["time"], y=br_df["num_overloaded_lines"], name="<b>Line Overloads</b>", marker_color=C1))
+            fig2.add_trace(go.Bar(x=br_df["time"], y=br_df["num_overloaded_transformers"], name="<b>Transformer Overloads</b>", marker_color=C2))
+            fig2.add_trace(go.Bar(x=br_df["time"], y=br_df["undervoltage_buses"], name="<b>Undervoltage</b>", marker_color=C_RED))
             fig2.update_layout(
                 barmode="stack", height=270, margin=dict(t=10, b=30),
-                xaxis_title="Hour of Day", yaxis_title="Count",
+                xaxis_title="<b>Hour of Day</b>", yaxis_title="<b>Count</b>",
                 plot_bgcolor="white", paper_bgcolor="white",
-                legend=dict(orientation="h", y=1.05, x=0.5, xanchor="center", font=dict(family="Arial", size=11)),
-                font=dict(family="Arial", size=11)
+                legend=dict(orientation="h", y=1.1, x=0.5, xanchor="center", font=dict(family="Arial", size=11, color=C_DARK)),
+                font=dict(family="Arial", size=11),
+                xaxis=dict(title_font=dict(size=10, family="Arial")),
+                yaxis=dict(title_font=dict(size=10, family="Arial")),
             )
             st.plotly_chart(fig2, use_container_width=True)
 
@@ -827,27 +926,29 @@ if st.session_state.study_data and not st.session_state.running:
         if profiles:
             fig3 = go.Figure()
             fig3.add_trace(go.Scatter(
-                x=profiles["time"], y=profiles["feeder_mult"], name="Feeder Load Multiplier",
+                x=profiles["time"], y=profiles["feeder_mult"], name="<b>Feeder Load Multiplier</b>",
                 line=dict(width=2.5, color=C_DARK), fill='tozeroy', fillcolor='rgba(45,45,45,0.04)'
             ))
             fig3.add_trace(go.Scatter(
-                x=profiles["time"], y=profiles["ev_mw"], name="EV Demand (MW)",
+                x=profiles["time"], y=profiles["ev_mw"], name="<b>EV Demand (MW)</b>",
                 line=dict(width=2.5, color=C1), fill='tozeroy', fillcolor='rgba(216,86,4,0.06)'
             ))
             fig3.add_trace(go.Scatter(
-                x=profiles["time"], y=profiles["solar_mw"], name="Solar Generation (MW)",
+                x=profiles["time"], y=profiles["solar_mw"], name="<b>Solar Generation (MW)</b>",
                 line=dict(width=2.5, color=C_GREEN, dash="dot")
             ))
             fig3.add_trace(go.Scatter(
-                x=profiles["time"], y=profiles["dc_mw"], name="Data Center (MW)",
+                x=profiles["time"], y=profiles["dc_mw"], name="<b>Data Center (MW)</b>",
                 line=dict(width=2.5, color=C_RED, dash="dash")
             ))
             fig3.update_layout(
-                height=380, margin=dict(t=50, b=30),
-                xaxis_title="Hour of Day", yaxis_title="Value",
+                height=380, margin=dict(t=50, b=50),
+                xaxis_title="<b>Hour of Day</b>", yaxis_title="<b>Value</b>",
                 plot_bgcolor="white", paper_bgcolor="white",
-                legend=dict(orientation="h", y=1.12, x=0.5, xanchor="center", font=dict(family="Arial", size=11)),
-                font=dict(family="Arial", size=11)
+                legend=dict(orientation="h", y=1.12, x=0.5, xanchor="center", font=dict(family="Arial", size=11, color=C_DARK)),
+                font=dict(family="Arial", size=11),
+                xaxis=dict(title_font=dict(size=10, family="Arial"), tickangle=-45),
+                yaxis=dict(title_font=dict(size=10, family="Arial")),
             )
             st.plotly_chart(fig3, use_container_width=True)
 
@@ -871,11 +972,216 @@ if st.session_state.study_data and not st.session_state.running:
             memo_clean = memo.replace("# FeederIQ Planning Decision Memo\n", "").replace("## Executive Summary\n", "").strip()
             st.markdown(f'<div class="memo-area">{memo_clean}</div>', unsafe_allow_html=True)
 
+            # Download button for memo as PDF
+            st.markdown("---")
+
+            def _build_pdf_memo(data, memo_text):
+                """Generate a professional PDF memo with PwC branding."""
+                from fpdf import FPDF
+                import io
+
+                class MemoDoc(FPDF):
+                    def header(self):
+                        self.set_font("Helvetica", "B", 18)
+                        self.set_text_color(216, 86, 4)
+                        self.cell(0, 12, "pwc", align="R", new_x="LMARGIN", new_y="NEXT")
+                        self.ln(2)
+                        self.set_draw_color(216, 86, 4)
+                        self.set_line_width(0.5)
+                        self.line(10, self.get_y(), 200, self.get_y())
+                        self.ln(4)
+
+                    def footer(self):
+                        self.set_y(-15)
+                        self.set_font("Helvetica", "I", 7)
+                        self.set_text_color(100, 100, 100)
+                        self.cell(0, 10, "FeederIQ - Agentic Distribution Planning | PwC Advisory | Confidential", align="C")
+
+                    def section_title(self, title):
+                        self.set_font("Helvetica", "B", 12)
+                        self.set_text_color(45, 45, 45)
+                        self.ln(4)
+                        self.cell(0, 8, title, new_x="LMARGIN", new_y="NEXT")
+                        self.set_draw_color(216, 86, 4)
+                        self.line(10, self.get_y(), 100, self.get_y())
+                        self.ln(3)
+
+                    def key_value(self, key, value):
+                        self.set_font("Helvetica", "B", 9)
+                        self.set_text_color(45, 45, 45)
+                        self.cell(55, 6, key, new_x="END")
+                        self.set_font("Helvetica", "", 9)
+                        self.set_text_color(80, 80, 80)
+                        self.cell(0, 6, str(value), new_x="LMARGIN", new_y="NEXT")
+
+                    def body_text(self, text):
+                        self.set_font("Helvetica", "", 9)
+                        self.set_text_color(50, 50, 50)
+                        self.multi_cell(0, 5, text)
+                        self.ln(2)
+
+                pdf = MemoDoc()
+                pdf.set_auto_page_break(auto=True, margin=20)
+                pdf.add_page()
+
+                # Title
+                pdf.set_font("Helvetica", "B", 18)
+                pdf.set_text_color(45, 45, 45)
+                pdf.cell(0, 12, "Planning Decision Memo", new_x="LMARGIN", new_y="NEXT")
+                pdf.set_font("Helvetica", "I", 9)
+                pdf.set_text_color(100, 100, 100)
+                pdf.cell(0, 6, f"Generated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}", new_x="LMARGIN", new_y="NEXT")
+                pdf.ln(6)
+
+                # Executive Summary
+                scenario = data.get('scenario', {})
+                top_rec = data.get('top_recommendation', {})
+                bs_data = data.get('base_summary', {})
+
+                pdf.section_title("Executive Summary")
+                severity = "Critical" if bs_data.get('grid_stress_score', 0) > 3000 else ("High" if bs_data.get('grid_stress_score', 0) > 1000 else "Moderate")
+                pdf.body_text(
+                    f"This memo presents results of an agentic distribution planning study analyzing the "
+                    f"IEEE 123-bus feeder under projected {scenario.get('horizon_label', '12m')} growth scenarios. "
+                    f"Baseline grid stress: {bs_data.get('grid_stress_score', 0):.0f} ({severity}). "
+                    f"The recommended solution achieves {top_rec.get('technical_improvement_pct', 0):.1f}% "
+                    f"grid stress reduction with an overall score of {top_rec.get('final_score', 0):.2f}/10."
+                )
+
+                # Study Configuration - TABLE
+                pdf.section_title("Study Configuration")
+                pdf.set_font("Helvetica", "B", 8)
+                pdf.set_text_color(100, 100, 100)
+                pdf.set_fill_color(245, 245, 245)
+                pdf.cell(70, 6, "Parameter", border=1, fill=True, new_x="END")
+                pdf.cell(60, 6, "Value", border=1, fill=True, new_x="LMARGIN", new_y="NEXT")
+                pdf.set_font("Helvetica", "", 9)
+                pdf.set_text_color(50, 50, 50)
+                config_rows = [
+                    ("Planning Horizon", scenario.get('horizon_label', 'N/A')),
+                    ("EV Growth", scenario.get('ev_level', 'N/A')),
+                    ("Solar Adoption", scenario.get('solar_level', 'N/A')),
+                    ("Data Center Load", scenario.get('dc_level', 'N/A')),
+                    ("Data Source", "Real (DOE openEDI)" if scenario.get('use_real_data') else "Synthetic profiles"),
+                ]
+                for label, val in config_rows:
+                    pdf.cell(70, 6, label, border=1, new_x="END")
+                    pdf.cell(60, 6, str(val), border=1, new_x="LMARGIN", new_y="NEXT")
+                pdf.ln(4)
+
+                # Baseline Assessment
+                pdf.section_title("Baseline Assessment")
+                # Use table for clean formatting
+                pdf.set_font("Helvetica", "B", 8)
+                pdf.set_text_color(100, 100, 100)
+                pdf.set_fill_color(245, 245, 245)
+                pdf.cell(70, 6, "Metric", border=1, fill=True, new_x="END")
+                pdf.cell(50, 6, "Value", border=1, fill=True, new_x="LMARGIN", new_y="NEXT")
+                pdf.set_font("Helvetica", "", 9)
+                pdf.set_text_color(50, 50, 50)
+                baseline_rows = [
+                    ("Grid Stress Score", f"{bs_data.get('grid_stress_score', 0):.0f} ({severity})"),
+                    ("Line Overloads (24h)", str(bs_data.get('total_line_overloads', 0))),
+                    ("Transformer Overloads (24h)", str(bs_data.get('total_transformer_overloads', 0))),
+                    ("Undervoltage Events", str(bs_data.get('total_undervoltage_buses', 0))),
+                    ("Convergence Failures", str(bs_data.get('convergence_failures', 0))),
+                ]
+                for label, val in baseline_rows:
+                    pdf.cell(70, 6, label, border=1, new_x="END")
+                    pdf.cell(50, 6, val, border=1, new_x="LMARGIN", new_y="NEXT")
+                pdf.ln(4)
+
+                # Recommended Solution - TABLE
+                pdf.section_title("Recommended Solution")
+                pdf.set_font("Helvetica", "B", 11)
+                pdf.set_text_color(216, 86, 4)
+                pdf.cell(0, 8, top_rec.get('portfolio_name', 'N/A'), new_x="LMARGIN", new_y="NEXT")
+                pdf.ln(2)
+                pdf.set_font("Helvetica", "B", 8)
+                pdf.set_text_color(100, 100, 100)
+                pdf.set_fill_color(245, 245, 245)
+                pdf.cell(70, 6, "Dimension", border=1, fill=True, new_x="END")
+                pdf.cell(60, 6, "Score", border=1, fill=True, new_x="LMARGIN", new_y="NEXT")
+                pdf.set_font("Helvetica", "", 9)
+                pdf.set_text_color(50, 50, 50)
+                score_rows = [
+                    ("Final Score", f"{top_rec.get('final_score', 0):.2f} / 10"),
+                    ("Grid Relief", f"{top_rec.get('grid_relief_score', 0):.1f} / 10 ({top_rec.get('technical_improvement_pct', 0):.1f}% reduction)"),
+                    ("Cost Efficiency", f"{top_rec.get('cost_score', 0):.1f} / 10"),
+                    ("Speed to Value", f"{top_rec.get('speed_to_value_score', 0):.1f} / 10"),
+                    ("ESG Alignment", f"{top_rec.get('esg_score', 0):.1f} / 10"),
+                ]
+                for label, val in score_rows:
+                    pdf.cell(70, 6, label, border=1, new_x="END")
+                    pdf.cell(60, 6, val, border=1, new_x="LMARGIN", new_y="NEXT")
+                pdf.ln(3)
+                if data.get('nwa_resolved_all'):
+                    pdf.set_font("Helvetica", "B", 9)
+                    pdf.set_text_color(27, 140, 58)
+                    pdf.cell(0, 6, "NWA fully resolves all grid violations. No traditional capex required.", new_x="LMARGIN", new_y="NEXT")
+                else:
+                    pdf.set_font("Helvetica", "", 9)
+                    pdf.set_text_color(80, 80, 80)
+                    pdf.cell(0, 6, "Residual violations remain. Hybrid NWA + capex approach recommended.", new_x="LMARGIN", new_y="NEXT")
+
+                # Scoring Methodology
+                pdf.section_title("Scoring Methodology")
+                pdf.set_font("Helvetica", "B", 9)
+                pdf.set_text_color(45, 45, 45)
+                pdf.cell(0, 6, "Final Score = 0.40 x Grid Relief + 0.25 x Cost + 0.20 x Speed + 0.15 x ESG", new_x="LMARGIN", new_y="NEXT")
+                pdf.ln(2)
+                pdf.body_text(
+                    "Grid Relief scored using sigmoid normalization reflecting diminishing marginal value "
+                    "of incremental improvement (EPRI methodology). Cost, Speed, and ESG from expert-calibrated "
+                    "intervention matrices per CPUC IRP (D.22-02-004) and NY REV BCA frameworks."
+                )
+
+                # Agent Workflow
+                pdf.section_title("Agent Workflow Log")
+                for cp in data.get("checkpoints", []):
+                    step_name = cp["step"].replace("_", " ").title().replace("Nwa", "NWA")
+                    requires_approval = cp.get("requires_approval", False)
+                    # Color coding: green=complete/good, amber=needs attention, red=critical
+                    if not requires_approval:
+                        pdf.set_text_color(27, 140, 58)  # green
+                        icon = "[OK]"
+                    else:
+                        pdf.set_text_color(216, 86, 4)  # amber/orange
+                        icon = "[!!]"
+                    pdf.set_font("Helvetica", "B", 9)
+                    pdf.cell(0, 5, f"{icon} {step_name}", new_x="LMARGIN", new_y="NEXT")
+                    pdf.set_font("Helvetica", "", 8)
+                    pdf.set_text_color(80, 80, 80)
+                    pdf.multi_cell(0, 4, cp["message"])
+                    pdf.ln(2)
+
+                buf = io.BytesIO()
+                pdf.output(buf)
+                buf.seek(0)
+                return buf.getvalue()
+
+            pdf_bytes = _build_pdf_memo(data, memo)
+            st.download_button(
+                "📥 Download Decision Memo (.pdf)",
+                data=pdf_bytes,
+                file_name=f"FeederIQ_Decision_Memo_{pd.Timestamp.now().strftime('%Y%m%d_%H%M')}.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+
         st.markdown(f'<div class="sub-head">Agent Workflow Log</div>', unsafe_allow_html=True)
         for cp in data.get("checkpoints", []):
             icon = "✅" if not cp.get("requires_approval") else "⚠️"
-            st.markdown(f'''<div class="agent-row done"><span style="font-size:1rem;">{icon}</span>
-                <div><div class="name">{cp["step"].replace("_", " ").title().replace("Nwa", "NWA")}</div><div class="detail">{cp["message"]}</div></div></div>''', unsafe_allow_html=True)
+            step_name = cp["step"].replace("_", " ").title().replace("Nwa", "NWA")
+            # Longer write-ups per agent step
+            step_detail = cp["message"]
+            st.markdown(f'''<div class="agent-row done" style="flex-direction:column;align-items:flex-start;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span style="font-size:1rem;">{icon}</span>
+                    <div class="name">{step_name}</div>
+                </div>
+                <div class="detail" style="margin-top:4px;line-height:1.5;">{step_detail}</div>
+            </div>''', unsafe_allow_html=True)
 
     st.markdown("---")
     if st.button("🔄  Start New Study"):
@@ -883,7 +1189,7 @@ if st.session_state.study_data and not st.session_state.running:
         st.session_state.running = False
         st.rerun()
 
-elif not st.session_state.running:
+elif not st.session_state.study_data and not st.session_state.running:
     # Landing
     st.markdown(f'''<div style="display:flex;gap:12px;margin-bottom:16px;">
         <div class="card" style="flex:1;"><div class="lbl" style="color:{C1};">Step 1</div><div class="val" style="font-size:1.1rem;">Configure</div><div class="sub">Select growth scenarios and preferences</div></div>

@@ -35,6 +35,7 @@ class StudyState(TypedDict):
     # Inputs
     scenario: dict
     max_portfolios: int
+    min_active_measures: int
     required_interventions: list
     # Intermediate
     profiles_records: list  # serializable list of dicts
@@ -108,9 +109,10 @@ def constraint_node(state: StudyState) -> dict:
 def nwa_node(state: StudyState) -> dict:
     agent = NWAAgent()
     max_p = min(state.get("max_portfolios", 30), 30)
+    min_m = state.get("min_active_measures", 1)
     profiles = _records_to_df(state["profiles_records"])
     required = state.get("required_interventions") or None
-    nwa_scored = agent.run(profiles, state["base_summary"], max_portfolios=max_p, required_interventions=required)
+    nwa_scored = agent.run(profiles, state["base_summary"], max_portfolios=max_p, required_interventions=required, min_active_measures=min_m)
 
     best_nwa_name = nwa_scored[0]["portfolio_name"] if nwa_scored else "None"
     best_nwa_score = nwa_scored[0]["final_score"] if nwa_scored else 0
@@ -130,9 +132,10 @@ def nwa_node(state: StudyState) -> dict:
 def capex_node(state: StudyState) -> dict:
     agent = CapexAgent()
     max_p = min(state.get("max_portfolios", 30), 30)
+    min_m = state.get("min_active_measures", 1)
     profiles = _records_to_df(state["profiles_records"])
     required = state.get("required_interventions") or None
-    capex_scored = agent.run(profiles, state["base_summary"], max_portfolios=max_p, required_interventions=required)
+    capex_scored = agent.run(profiles, state["base_summary"], max_portfolios=max_p, required_interventions=required, min_active_measures=min_m)
     return {"capex_scored": capex_scored}
 
 
@@ -203,12 +206,13 @@ def build_graph():
     )
 
 
-def run_study(scenario: dict, max_portfolios: int = 60, thread_id: str = "default", required_interventions: list = None):
+def run_study(scenario: dict, max_portfolios: int = 60, thread_id: str = "default", required_interventions: list = None, min_active_measures: int = 1):
     """Run without interrupts (auto-approve). Used by the API for non-interactive mode."""
     graph = build_graph()
     initial_state = {
         "scenario": scenario,
         "max_portfolios": max_portfolios,
+        "min_active_measures": min_active_measures,
         "required_interventions": required_interventions or [],
         "profiles_records": [],
         "assumptions": {},

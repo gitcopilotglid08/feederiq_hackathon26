@@ -50,8 +50,11 @@ class RecommendationAgent:
         system_prompt = self.instructions + """
 
 You are a senior distribution planning consultant at PwC.
-Generate a concise, professional planning decision memo in Markdown format.
-Use tables where appropriate. Be specific with numbers. Keep it under 400 words.
+Generate a professional planning decision memo in Markdown format.
+Include: Executive Summary, Planning Scenario (table), Baseline Assessment (table), 
+Recommended Solution with score breakdown, Alternative Options (comparison table), 
+and Implementation Next Steps.
+Use tables where appropriate. Be specific with numbers. Target 500-700 words.
 Do NOT include a top-level title (the UI already has one).
 Start directly with ## Executive Summary.
 """
@@ -82,7 +85,7 @@ RUNNER-UP: {second.get('portfolio_name', 'N/A') if second else 'N/A'} (Score: {s
 TOP 5 RANKED:
 """ + "\n".join([f"  {i+1}. {r.get('portfolio_name','?')} (score={r.get('final_score',0):.2f}, improvement={r.get('technical_improvement_pct',0):.1f}%)" for i, r in enumerate(top5)])
 
-        return invoke_llm(system_prompt, context, max_tokens=1500)
+        return invoke_llm(system_prompt, context, max_tokens=2000)
 
     def _generate_memo_template(self, top, second, base_summary, assumptions, nwa_resolved):
         """Fallback template-based memo when LLM is unavailable."""

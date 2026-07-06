@@ -1,6 +1,6 @@
-# FeederIQ – Agentic Distribution Planning
+# FeederIQ - Agentic Distribution Planning
 
-An AI-powered planning copilot that stress-tests distribution feeders under future load-growth scenarios and recommends optimal interventions using multi-criteria scoring — prioritizing **non-wires alternatives** (NWA) before expensive capex.
+An AI-powered planning copilot that stress-tests distribution feeders under future load-growth scenarios and recommends optimal interventions using multi-criteria scoring - prioritizing **non-wires alternatives** (NWA) before expensive capex.
 
 **Documentation**: See `docs/` folder for detailed project reference, assumptions rationale, and progress tracker.
 
@@ -9,7 +9,7 @@ An AI-powered planning copilot that stress-tests distribution feeders under futu
 ### Prerequisites
 
 - Python 3.12+
-- OpenDSS engine (via `opendssdirect.py` — works on Windows, Linux, macOS)
+- OpenDSS engine (via `opendssdirect.py` - works on Windows, Linux, macOS)
 
 ---
 
@@ -182,8 +182,8 @@ Retrieve a previously computed study by its ID.
 | `solar_level` | Low, Base, High | Solar adoption (100, 200, 300 MW) |
 | `dc_level` | Low, Moderate, High | Data center size (1.0, 1.75, 3.0 MW) |
 | `dc_timeline_label` | 6m, 12m, 18m | When data center comes online |
-| `max_active_measures` | 1–5 | Max interventions per portfolio |
-| `max_portfolios` | 10–120 | How many portfolios to evaluate |
+| `max_active_measures` | 1-5 | Max interventions per portfolio |
+| `max_portfolios` | 10-120 | How many portfolios to evaluate |
 
 ---
 
@@ -191,23 +191,23 @@ Retrieve a previously computed study by its ID.
 
 The backend uses **LangGraph** for orchestration with human-in-the-loop checkpoints:
 
-1. **Scenario Agent** – Converts selections into numeric growth assumptions and 24-hour profiles
-2. **Simulation Agent** – Runs OpenDSS 24-hour power flow (baseline)
-3. **Constraint Agent** – Detects voltage violations and equipment overloads ← *[CHECKPOINT]*
-4. **NWA Agent** – Evaluates non-wires alternative portfolios ← *[CHECKPOINT]*
-5. **Capex Agent** – Evaluates hybrid/capex options (skipped if NWA resolves all)
-6. **Recommendation Agent** – Ranks all options and generates decision memo
+1. **Scenario Agent** - Converts selections into numeric growth assumptions and 24-hour profiles
+2. **Simulation Agent** - Runs OpenDSS 24-hour power flow (baseline)
+3. **Constraint Agent** - Detects voltage violations and equipment overloads ← *[CHECKPOINT]*
+4. **NWA Agent** - Evaluates non-wires alternative portfolios ← *[CHECKPOINT]*
+5. **Capex Agent** - Evaluates hybrid/capex options (skipped if NWA resolves all)
+6. **Recommendation Agent** - Ranks all options and generates decision memo
 
 ---
 
 ## Scoring Framework
 
-Portfolios are scored on 4 dimensions (weighted sum, scale 0–10):
+Portfolios are scored on 4 dimensions (weighted sum, scale 0-10):
 
-- **Grid Relief** (40%) – % reduction in equipment overloads and voltage violations
-- **Cost Efficiency** (25%) – Lower implementation cost relative to full capex
-- **Speed to Value** (20%) – Combined feasibility and deployment timeline
-- **ESG Alignment** (15%) – Sustainability benefit (lower carbon, less material intensity)
+- **Grid Relief** (40%) - % reduction in equipment overloads and voltage violations
+- **Cost Efficiency** (25%) - Lower implementation cost relative to full capex
+- **Speed to Value** (20%) - Combined feasibility and deployment timeline
+- **ESG Alignment** (15%) - Sustainability benefit (lower carbon, less material intensity)
 
 **The system does not simply recommend the cheapest option.** All dimension scores are exposed in the ranking table, so planners can sort/filter by any single criterion and select based on their operational priority.
 

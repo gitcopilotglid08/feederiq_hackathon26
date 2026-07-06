@@ -273,17 +273,25 @@ See `assumptions_rationale.md` for full market-backed justification of:
 
 ### Streamlit Frontend
 
-- Sidebar: all scenario options (horizon, EV, solar, DC size, DC timeline, max portfolios, max active measures)
-- Main area: agent workflow steps, 24-hour profile chart, violation metrics, hourly violations bar chart, top recommendation card, portfolio ranking table, decision memo markdown, before/after comparison
+- Sidebar: all scenario options (horizon, EV, solar, DC size, DC timeline, max/min portfolios measures, solution preferences, min grid relief)
+- Info tooltips on EV Growth and Solar Adoption explaining time period context
+- Main area: agent workflow steps with animated progress, tabbed results (Recommendation, Rankings, Baseline, Profiles, Memo)
+- Score Breakdown: PwC-style dark gradient card with color-coded scores per dimension
+- Impact Assessment: Before (red) / After (green) colored cards, grid stress visualization using topology-based BFS
+- Rankings: sort-by-dimension selector, bold in-bar scores
+- Profiles: 45° x-axis labels, bold axis titles, bold legends
+- Memo: PDF download with PwC branding, tables, colored agent workflow
+- Radar chart comparing selected vs runner-up portfolio
 
 ### Validated End-to-End Results
 
 - **Scenario**: 12m horizon, Base EV, Base Solar, Moderate DC, 12m timeline, 10 portfolios
-- **Baseline stress**: 3490.0
-- **Top recommendation**: PhasedInterconnection:66 (final_score=6.854)
-- **NWA resolved all**: False (residual violations remain)
+- **Baseline stress**: ~2700-4600 (varies by scenario)
+- **Top recommendation**: varies (e.g. Staged Load Connection (High) + Dynamic Tariffs)
+- **Scoring**: Logistic (sigmoid) normalization for grid relief; weighted sum across 4 dimensions
+- **NWA resolved all**: scenario-dependent
 - **Checkpoints returned**: 4 (scenario, constraint_analysis, nwa_evaluation, recommendation)
-- **API response time**: ~15s for 10 portfolios
+- **API response time**: ~15-17s for 10 portfolios
 
 ### Key Dependencies
 
@@ -291,4 +299,5 @@ See `assumptions_rationale.md` for full market-backed justification of:
 fastapi, uvicorn, pydantic, streamlit, plotly, requests
 langgraph, langchain-core
 opendssdirect.py, numpy, pandas, matplotlib, networkx
+fpdf2, boto3
 ```

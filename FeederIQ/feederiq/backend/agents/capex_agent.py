@@ -34,8 +34,8 @@ class CapexAgent:
         self.config = _parse_config(self.instructions)
         self.require_key = self.config.get("require_intervention", "TransformerUpgrade")
 
-    def run(self, profiles, base_summary: dict, max_portfolios: int = 30, required_interventions: list = None) -> list:
-        all_portfolios = generate_portfolios(max_active_measures=3, required_interventions=required_interventions)
+    def run(self, profiles, base_summary: dict, max_portfolios: int = 30, required_interventions: list = None, min_active_measures: int = 1) -> list:
+        all_portfolios = generate_portfolios(max_active_measures=3, min_active_measures=min_active_measures, required_interventions=required_interventions)
         capex_portfolios = [p for p in all_portfolios if p.get(self.require_key, 0) > 0]
         capex_portfolios = capex_portfolios[:max_portfolios]
 
