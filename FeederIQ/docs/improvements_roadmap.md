@@ -1,6 +1,6 @@
 # FeederIQ — Future Improvements & Data Roadmap
 
-## Recent Enhancements (R4 — July 2026)
+## Recent Enhancements (R5 — July 2026)
 
 | Feature | Description | Status |
 |---------|-------------|--------|
@@ -14,6 +14,14 @@
 | Info tooltips (EV, Solar) | Context-rich tooltips explaining time period and parameter meaning | ✅ Done |
 | LLM timeout optimization | 5s connect / 60s read / 1 retry boto3 config | ✅ Done |
 | Recommendation Agent animation | Dot-based scoring visualization for last agent step | ✅ Done |
+| Agent execution tree redesign | Hierarchical tree flow: Scenario → Simulation → Constraint → (NWA, Capex) → Recommendation | ✅ Done |
+| Big4-style tree cards | Centered compact cards with refined typography and connector hierarchy | ✅ Done |
+| Tree state color refresh | Running (blue), queued (PwC orange), completed (minimal teal) for better contrast | ✅ Done |
+| View Results scroll behavior | One-click result navigation now reliably resets to top of page | ✅ Done |
+| Shared logo system | Unified PwC SVG logo usage across Streamlit header and PDF memo | ✅ Done |
+| PDF header spacing + logo consistency | Reduced dead space and stabilized logo rendering on all pages | ✅ Done |
+| Bedrock model upgrade | Default model moved to Claude 3.5 Sonnet v2 (`us.anthropic.claude-3-5-sonnet-20241022-v2:0`) | ✅ Done |
+| Memo prompt cleanup | Recommendation memo now excludes "Implementation Next Steps" section | ✅ Done |
 
 ---
 
@@ -90,7 +98,7 @@
 
 ### Currently Implemented
 - Agent instruction files (markdown) drive agent behavior (configurable without code changes)
-- LLM-powered decision memo generation via AWS Bedrock (Claude 3 Sonnet)
+- LLM-powered decision memo generation via AWS Bedrock (Claude 3.5 Sonnet v2)
 - LLM-powered constraint violation interpretation (natural language)
 - Real data toggle: openEDI DOE profiles vs synthetic parametric curves
 - Before/after grid stress visualization (red→green node map)

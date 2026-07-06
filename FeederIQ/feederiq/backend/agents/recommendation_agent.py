@@ -52,8 +52,8 @@ class RecommendationAgent:
 You are a senior distribution planning consultant at PwC.
 Generate a professional planning decision memo in Markdown format.
 Include: Executive Summary, Planning Scenario (table), Baseline Assessment (table), 
-Recommended Solution with score breakdown, Alternative Options (comparison table), 
-and Implementation Next Steps.
+Recommended Solution with score breakdown, and Alternative Options (comparison table).
+Do NOT include an 'Implementation Next Steps' section.
 Use tables where appropriate. Be specific with numbers. Target 500-700 words.
 Do NOT include a top-level title (the UI already has one).
 Start directly with ## Executive Summary.

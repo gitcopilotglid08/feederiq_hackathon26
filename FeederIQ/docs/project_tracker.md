@@ -192,7 +192,7 @@ The framework inherently favors NWA because:
 - [x] Grid Stress Score explanation with severity scale in baseline tab.
 - [x] Intervention levels renamed: Low/Medium/High (from Pilot/Scaled/Full).
 - [x] Fixed checkpoint messages: proper formatting, no = signs, NWA spelled out.
-- [x] LLM-powered agents via AWS Bedrock (Claude 3 Sonnet). Constraint + Recommendation agents use LLM.
+- [x] LLM-powered agents via AWS Bedrock (Claude 3.5 Sonnet v2). Constraint + Recommendation agents use LLM.
 - [x] Agent instruction files (.md) serve as system prompts for LLM reasoning.
 - [x] Interventions renamed: Capacity Upgrade, Dynamic Tariffs, Staged Load Connection.
 - [x] Increased Capacity Upgrade cost penalty (reflects real transformer costs).
@@ -201,6 +201,11 @@ The framework inherently favors NWA because:
 - [x] Before/after grid stress visualization (red→green node map).
 - [x] Agent completion summaries (shows actual findings, not just 'Complete').
 - [x] View Results button (no auto-redirect from agent page).
+- [x] Agent execution view refactored to a true tree: Scenario → Simulation → Constraint → (NWA, Capex) → Recommendation.
+- [x] Agent tree styling refreshed with centered compact cards and state palette (running=blue, queued=PwC orange, completed=teal).
+- [x] Shared PwC logo asset integrated across Streamlit and PDF; placement/size tuned for visual consistency.
+- [x] PDF header spacing reduced and logo rendering stabilized across all pages.
+- [x] Recommendation memo prompt updated to exclude "Implementation Next Steps" section.
 - [ ] Deploy to cloud / containerize.
 
 ---
@@ -230,11 +235,11 @@ Wizard-style UI with PwC branding:
 - **Step 2**: Load Growth (EV + Solar with Low/Base/High + custom numeric input)
 - **Step 3**: Data Center (size + timeline + feeder topology map)
 - **Step 4**: Study Configuration (portfolio params + scenario summary cards)
-- **Step 5**: Agent Execution (animated agent cards showing pipeline progress)
+- **Step 5**: Agent Execution (tree-style agent graph showing hierarchical pipeline progress)
 - **Step 6**: Results (tabbed: Recommendation, Ranking, Baseline, Profiles, Memo)
 
 Design:
-- PwC orange (#D04A02) active tiles, pale orange completed, grey/white pending
+- Running nodes highlighted in blue, queued nodes in PwC orange, completed nodes in minimal teal
 - Light backgrounds throughout
 - Radar charts for multi-criteria comparison
 - Score bars for dimension breakdown
@@ -253,7 +258,7 @@ See `assumptions_rationale.md` for full market-backed justification of:
 
 ### LLM Integration (Active)
 
-- **Model**: Claude 3 Sonnet via AWS Bedrock (`us.anthropic.claude-3-sonnet-20240229-v1:0`)
+- **Model**: Claude 3.5 Sonnet v2 via AWS Bedrock (`us.anthropic.claude-3-5-sonnet-20241022-v2:0`)
 - **Agents using LLM**: Constraint Agent (violation interpretation), Recommendation Agent (memo generation)
 - **Pattern**: Agent instruction `.md` files serve as LLM system prompts
 - **Fallback**: Template-based output if Bedrock unavailable (no crash)
@@ -280,7 +285,7 @@ See `assumptions_rationale.md` for full market-backed justification of:
 - Impact Assessment: Before (red) / After (green) colored cards, grid stress visualization using topology-based BFS
 - Rankings: sort-by-dimension selector, bold in-bar scores
 - Profiles: 45° x-axis labels, bold axis titles, bold legends
-- Memo: PDF download with PwC branding, tables, colored agent workflow
+- Memo: PDF download with PwC branding, tightened header spacing, and consistent logo rendering on all pages
 - Radar chart comparing selected vs runner-up portfolio
 
 ### Validated End-to-End Results

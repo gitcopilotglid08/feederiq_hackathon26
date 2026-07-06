@@ -3,6 +3,8 @@ FeederIQ – Streamlit Frontend (R3)
 """
 import re
 import time
+import base64
+from pathlib import Path
 import requests
 import streamlit as st
 import plotly.graph_objects as go
@@ -30,7 +32,7 @@ st.markdown(f"""
 
     .top-bar {{ display: flex; align-items: center; justify-content: space-between; padding: 10px 0 12px 0; border-bottom: 3px solid {C1}; margin-bottom: 18px; }}
     .top-bar .name {{ color:{C_DARK}; font: 700 1.05rem Arial,sans-serif; }}
-    .top-bar .logo {{ color:{C1}; font: 900 1.5rem Georgia,serif; }}
+    .top-bar .logo {{ height: 50px; }}
 
     .sec-head {{ font: 700 1.1rem Arial,sans-serif; color:{C_DARK}; margin: 20px 0 8px; padding-bottom: 5px; border-bottom: 2px solid {C1}; }}
     .sub-head {{ font: 700 0.88rem Arial,sans-serif; color:{C_DARK}; margin: 14px 0 5px; }}
@@ -342,6 +344,8 @@ if "study_data" not in st.session_state:
     st.session_state.study_data = None
 if "running" not in st.session_state:
     st.session_state.running = False
+if "scroll_to_top_once" not in st.session_state:
+    st.session_state.scroll_to_top_once = False
 
 # ─── Sidebar ──────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -446,10 +450,27 @@ with st.sidebar:
     run_btn = st.button("▶  Run Study", use_container_width=True)
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
-st.markdown(f'''<div class="top-bar">
-    <div class="name">FeederIQ Agentic Distribution Planning</div>
-    <div class="logo">pwc</div>
-</div>''', unsafe_allow_html=True)
+top_left, top_right = st.columns([7, 2])
+with top_left:
+    st.markdown(f'<div style="color:{C_DARK};font:700 1.35rem Arial,sans-serif;padding-top:18px;">FeederIQ Agentic Distribution Planning</div>', unsafe_allow_html=True)
+with top_right:
+    logo_path = Path(__file__).resolve().parent / "assets" / "pwc_logo.svg"
+    if logo_path.exists():
+        try:
+            # Render SVG natively in browser (avoids PIL.UnidentifiedImageError in st.image for SVG bytes)
+            svg_text = logo_path.read_text(encoding="utf-8")
+            svg_b64 = base64.b64encode(svg_text.encode("utf-8")).decode("ascii")
+            st.markdown(
+                f'<div style="display:flex;justify-content:flex-end;padding-top:0px;transform:translateY(-8px);">'
+                f'<img src="data:image/svg+xml;base64,{svg_b64}" width="92" style="display:block;" />'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+        except Exception:
+            st.markdown(f'<div style="color:{C1};font:900 1.6rem Georgia,serif;text-align:right;padding-top:8px;">pwc</div>', unsafe_allow_html=True)
+    else:
+        st.markdown(f'<div style="color:{C1};font:900 1.6rem Georgia,serif;text-align:right;padding-top:8px;">pwc</div>', unsafe_allow_html=True)
+st.markdown(f'<div style="border-bottom:3px solid {C1}; margin:4px 0 18px;"></div>', unsafe_allow_html=True)
 
 if run_btn:
     st.session_state.running = True
@@ -495,29 +516,133 @@ if st.session_state.running and st.session_state.study_data is None:
         "use_real_data": use_real_data,
     }
 
+    def _node_status(node_idx, current_idx):
+        if node_idx < current_idx:
+            return "done"
+        if node_idx == current_idx:
+            return "running"
+        return "pending"
+
+    def _render_node(icon, title, subtitle, status, pct=0, reco=False, max_width=440):
+        if status == "done":
+            bg = "#EDF8F4" if not reco else "#E7F3EE"
+            accent = "#2F7D6B"
+            card_border = "#C8E4DB"
+            status_label = "COMPLETED" if not reco else "FINALIZED"
+            status_color = "#2A6F60"
+            status_chip_bg = "#DDEFE8"
+            status_chip_border = "#B8D9CE"
+            detail_color = "#44675E"
+            icon_bg = "#D3EAE2"
+            shadow_color = "rgba(30, 96, 80, 0.14)"
+            meter = ""
+        elif status == "running":
+            bg = "#E3EEFF"
+            accent = "#1C5AA2"
+            card_border = "#AFCBEF"
+            status_label = "IN PROGRESS"
+            status_color = "#1C5AA2"
+            status_chip_bg = "#D6E6FC"
+            status_chip_border = "#A9C4EA"
+            detail_color = "#314F71"
+            icon_bg = "#C9DEFB"
+            shadow_color = "rgba(24, 78, 142, 0.16)"
+            if reco:
+                dots = "●" * (pct // 10) + "○" * (10 - pct // 10)
+                score_preview = f"{pct / 12.5:.1f}" if pct > 20 else "..."
+                meter = (
+                    f'<div style="margin-top:5px;font:600 0.6rem monospace;color:#1C5AA2;letter-spacing:1px;">{dots}</div>'
+                    f'<div style="font:500 0.56rem Arial;color:#3E648F;letter-spacing:0.04em;text-transform:uppercase;">Score convergence: {score_preview}</div>'
+                )
+            else:
+                meter = (
+                    '<div style="margin:6px auto 0 auto;height:3px;background:#D0E0F5;border-radius:2px;width:116px;">'
+                    f'<div style="height:3px;background:linear-gradient(90deg,#4B8DD9 0%,#1C5AA2 100%);border-radius:2px;width:{pct}%;transition:width 0.1s;"></div>'
+                    '</div>'
+                )
+        else:
+            bg = "#FFF1E1"
+            accent = C1
+            card_border = "#EFB886"
+            status_label = "QUEUED"
+            status_color = "#A64908"
+            status_chip_bg = "#FFDDBB"
+            status_chip_border = "#EFAE75"
+            detail_color = "#6A4A31"
+            icon_bg = "#FFD5AF"
+            shadow_color = "rgba(140, 71, 14, 0.16)"
+            meter = ""
+
+        return (
+            '<div style="display:flex;justify-content:center;">'
+            f'<div style="width:min(100%, {max_width}px);background:{bg};border:1px solid {card_border};border-top:2px solid {accent};'
+            f'border-radius:10px;padding:7px 10px 8px 10px;text-align:center;box-shadow:0 2px 6px {shadow_color};">'
+            '<div style="display:flex;align-items:center;justify-content:center;gap:6px;">'
+            f'<span style="display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:999px;background:{icon_bg};font-size:0.8rem;line-height:1;">{icon}</span>'
+            f'<span style="font:700 0.82rem Arial;color:{C_DARK};line-height:1.15;">{title}</span>'
+            '</div>'
+            f'<div style="display:inline-block;font:600 0.58rem Arial;color:{status_color};letter-spacing:0.08em;text-transform:uppercase;margin-top:4px;padding:2px 8px;border-radius:999px;background:{status_chip_bg};border:1px solid {status_chip_border};">{status_label}</div>'
+            f'<div style="font:400 0.7rem Arial;color:{detail_color};margin-top:2px;line-height:1.24;max-width:92%;margin-left:auto;margin-right:auto;">{subtitle}</div>'
+            f'{meter}'
+            '</div></div>'
+        )
+
+    def _render_agent_tree(states, texts, pct):
+        stage = next((idx for idx, s in enumerate(states) if s == "running"), len(states) - 1)
+
+        def _line_color(active, major=False):
+            if active:
+                return "#1F5FA8" if major else "#4E88CA"
+            return "#E88D14"
+
+        c01 = _line_color(stage >= 0, major=True)
+        c12 = _line_color(stage >= 1, major=True)
+        c2b = _line_color(stage >= 2, major=False)
+        c3 = _line_color(stage >= 3, major=False)
+        c4 = _line_color(stage >= 4, major=False)
+        cmerge = _line_color(stage >= 4, major=True)
+
+        nodes = [
+            _render_node(agents[0][0], agents[0][1], texts[0], states[0], pct, max_width=420),
+            _render_node(agents[1][0], agents[1][1], texts[1], states[1], pct, max_width=420),
+            _render_node(agents[2][0], agents[2][1], texts[2], states[2], pct, max_width=420),
+            _render_node(agents[3][0], agents[3][1], texts[3], states[3], pct, max_width=270),
+            _render_node(agents[4][0], agents[4][1], texts[4], states[4], pct, max_width=270),
+            _render_node(agents[5][0], agents[5][1], texts[5], states[5], pct, reco=True, max_width=460),
+        ]
+
+        return f'''
+        <div style="padding:10px 8px 10px 8px;max-width:760px;margin:0 auto;background:linear-gradient(180deg,#FFF6EB 0%,#FFFFFF 48%,#F3F8FF 100%);border:1px solid #E6C7A9;border-top:2px solid {C1};border-radius:12px;">
+            {nodes[0]}
+            <div style="display:flex;justify-content:center;"><div style="width:2px;height:8px;background:{c01};"></div></div>
+            {nodes[1]}
+            <div style="display:flex;justify-content:center;"><div style="width:2px;height:8px;background:{c12};"></div></div>
+            {nodes[2]}
+            <div style="display:flex;justify-content:center;"><div style="width:2px;height:7px;background:{c2b};"></div></div>
+            <div style="display:flex;justify-content:center;"><div style="width:8px;height:8px;border-radius:50%;background:{c2b};"></div></div>
+            <div style="display:flex;justify-content:center;"><div style="width:min(100%, 360px);height:2px;background:{c2b};"></div></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:min(100%, 580px);margin:6px auto 2px auto;">
+                {nodes[3]}
+                {nodes[4]}
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:min(100%, 580px);margin:0 auto;">
+                <div style="display:flex;justify-content:center;"><div style="width:2px;height:8px;background:{c3};"></div></div>
+                <div style="display:flex;justify-content:center;"><div style="width:2px;height:8px;background:{c4};"></div></div>
+            </div>
+            <div style="display:flex;justify-content:center;"><div style="width:min(100%, 360px);height:2px;background:{cmerge};"></div></div>
+            <div style="display:flex;justify-content:center;"><div style="width:8px;height:8px;border-radius:50%;background:{cmerge};"></div></div>
+            <div style="display:flex;justify-content:center;"><div style="width:2px;height:7px;background:{cmerge};"></div></div>
+            {nodes[5]}
+        </div>
+        '''
+
     api_done = False
     for i, (icon, name, detail) in enumerate(agents):
         for pct in range(0, 101, 5):
             progress.progress((i + pct / 100) / len(agents))
-            html = ""
-            for j, (ic, nm, dt) in enumerate(agents):
-                if j < i:
-                    html += f'<div class="agent-row done"><span style="font-size:1.1rem;">{ic}</span><div><div class="name">{nm}</div><div class="detail">✓ Complete</div></div></div>'
-                elif j == i:
-                    if j == 5:  # Recommendation Agent - special animation
-                        # Animated scoring visualization
-                        dots = "●" * (pct // 10) + "○" * (10 - pct // 10)
-                        score_preview = f"{pct / 12.5:.1f}" if pct > 20 else "..."
-                        html += f'''<div class="agent-row running"><span style="font-size:1.1rem;">{ic}</span><div>
-                            <div class="name">{nm}</div>
-                            <div class="detail">{dt}</div>
-                            <div style="margin-top:6px;font:600 0.75rem monospace;color:{C1};letter-spacing:2px;">{dots}</div>
-                            <div style="font:400 0.65rem Arial;color:{C_GREY};margin-top:3px;">Ranking portfolios... Score convergence: {score_preview}</div>
-                        </div></div>'''
-                    else:
-                        html += f'<div class="agent-row running"><span style="font-size:1.1rem;">{ic}</span><div><div class="name">{nm}</div><div class="detail">{dt}</div><div style="margin-top:4px;height:4px;background:#EFEFEF;border-radius:2px;width:200px;"><div style="height:4px;background:{C1};border-radius:2px;width:{pct}%;"></div></div></div></div>'
-                else:
-                    html += f'<div class="agent-row"><span style="font-size:1.1rem;">{ic}</span><div><div class="name">{nm}</div><div class="detail">{dt}</div></div></div>'
+            states = [_node_status(j, i) for j in range(len(agents))]
+            texts = [dt for _, _, dt in agents]
+            html = _render_agent_tree(states, texts, pct)
             agent_container.markdown(html, unsafe_allow_html=True)
             if i == 0 and pct == 0 and not api_done:
                 try:
@@ -544,26 +669,42 @@ if st.session_state.running and st.session_state.study_data is None:
     bs = study.get("base_summary", {})
     top_rec = study.get("top_recommendation", {})
     agent_summaries = [
-        f"✓ Profiles generated. Data source: {'Real (openEDI)' if study.get('scenario', {}).get('use_real_data') else 'Synthetic'}",
-        f"✓ 24-hour power flow complete. Feeder: IEEE 123-bus.",
-        f"✓ Grid stress: {bs.get('grid_stress_score', 0):.0f}. Line overloads: {bs.get('total_line_overloads', 0)}. Transformer overloads: {bs.get('total_transformer_overloads', 0)}.",
-        f"✓ Best NWA: {top_rec.get('portfolio_name', 'N/A') if top_rec.get('TransformerUpgrade', 0) == 0 else 'Evaluated'}. {len(study.get('ranking', []))} portfolios scored.",
-        f"✓ Capex options evaluated for comparison.",
-        f"✓ Top recommendation: {top_rec.get('portfolio_name', 'N/A')} (score: {top_rec.get('final_score', 0):.2f})",
+        f"Profiles generated. Data source: {'Real (openEDI)' if study.get('scenario', {}).get('use_real_data') else 'Synthetic'}",
+        "24-hour power flow complete. Feeder: IEEE 123-bus.",
+        f"Grid stress: {bs.get('grid_stress_score', 0):.0f}. Line overloads: {bs.get('total_line_overloads', 0)}. Transformer overloads: {bs.get('total_transformer_overloads', 0)}.",
+        f"Best NWA: {top_rec.get('portfolio_name', 'N/A') if top_rec.get('TransformerUpgrade', 0) == 0 else 'Evaluated'}. {len(study.get('ranking', []))} portfolios scored.",
+        "Capex options evaluated for comparison.",
+        f"Top recommendation: {top_rec.get('portfolio_name', 'N/A')} (score: {top_rec.get('final_score', 0):.2f})",
     ]
-    html = ""
-    for (ic, nm, dt), summary in zip(agents, agent_summaries):
-        html += f'<div class="agent-row done"><span style="font-size:1.1rem;">{ic}</span><div><div class="name">{nm}</div><div class="detail">{summary}</div></div></div>'
+    html = _render_agent_tree(["done"] * len(agents), agent_summaries, 100)
     agent_container.markdown(html, unsafe_allow_html=True)
 
     st.success("✅ All agents completed. Review summaries above, then view results.")
     if st.button("▶  View Results", key="view_results_btn"):
         st.session_state.running = False
+        st.session_state.scroll_to_top_once = True
         st.rerun()
     st.stop()  # Prevent anything below from rendering while on this page
 
 # ── Results ───────────────────────────────────────────────────────────────────
 if st.session_state.study_data:
+    if st.session_state.scroll_to_top_once:
+        import streamlit.components.v1 as _components
+        _components.html('''<script>
+            function scrollAll(){
+                var main = window.parent.document.querySelector("section.main");
+                if (main) main.scrollTop = 0;
+                var stApp = window.parent.document.querySelector(".stApp");
+                if (stApp) stApp.scrollTop = 0;
+                window.parent.document.documentElement.scrollTop = 0;
+                window.parent.scrollTo(0, 0);
+            }
+            setTimeout(scrollAll, 10);
+            setTimeout(scrollAll, 180);
+            setTimeout(scrollAll, 400);
+        </script>''', height=0)
+        st.session_state.scroll_to_top_once = False
+
     data = st.session_state.study_data
     ranking = data.get("ranking", [])
 
@@ -655,62 +796,86 @@ if st.session_state.study_data:
         speed_sc = selected.get("speed_to_value_score", (selected.get("feasibility_score", 0) + selected.get("deployment_score", 0)) / 2)
         esg_sc = selected.get("esg_score", 8)
 
-        # Score Breakdown with distinct styling (dark background, white text)
-        st.markdown(f'''<div style="background:linear-gradient(135deg, #2D2D2D 0%, #3D3D3D 100%);border-radius:8px;padding:14px 16px;margin-bottom:12px;border-left:4px solid {C1};">
-            <div style="font:700 0.95rem Arial;color:white;margin-bottom:10px;">Score Breakdown</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-                <div style="background:rgba(255,255,255,0.08);border-radius:6px;padding:8px 12px;" title="Measures % reduction in grid stress. Scored using sigmoid normalization (0-10) where raw improvement % is mapped non-linearly. This portfolio: {selected.get('technical_improvement_pct', 0):.1f}% reduction.">
-                    <div style="font:600 0.72rem Arial;color:rgba(255,255,255,0.7);">Grid Relief</div>
-                    <div style="font:800 1.2rem Arial;color:{("#1B8C3A" if grid_relief >= 7 else (C2 if grid_relief >= 4 else C_RED))};margin-top:2px;">{grid_relief:.1f}<span style="font:400 0.7rem Arial;color:rgba(255,255,255,0.4);"> / 10</span></div>
-                    <div style="font:400 0.62rem Arial;color:rgba(255,255,255,0.45);margin-top:2px;">{selected.get('technical_improvement_pct', 0):.1f}% stress reduction</div>
+        # Score Breakdown - light PwC style
+        sb_col1, sb_col2 = st.columns([20, 1])
+        with sb_col1:
+            st.markdown(f'''<div style="background:#FAFAFA;border-radius:8px;padding:14px 16px;margin-bottom:12px;border:1px solid #EBEBEB;border-top:3px solid {C1};">
+                <div style="font:700 0.95rem Arial;color:{C_DARK};margin-bottom:10px;">Score Breakdown</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                <div style="background:white;border-radius:6px;padding:10px 14px;border:1px solid #EBEBEB;border-left:3px solid {C1};">
+                    <div style="font:600 0.72rem Arial;color:{C_GREY};text-transform:uppercase;letter-spacing:0.3px;">Grid Relief</div>
+                    <div style="font:800 1.3rem Arial;color:{("#1B8C3A" if grid_relief >= 7 else (C1 if grid_relief >= 4 else C_RED))};margin-top:3px;">{grid_relief:.1f}<span style="font:400 0.75rem Arial;color:{C_GREY};"> / 10</span></div>
+                    <div style="font:400 0.68rem Arial;color:{C_GREY};margin-top:2px;">{selected.get('technical_improvement_pct', 0):.1f}% stress reduction</div>
                 </div>
-                <div style="background:rgba(255,255,255,0.08);border-radius:6px;padding:8px 12px;" title="Implementation cost relative to full capex. Score = 10 x (1 - cost/max_cost). Lower cost = higher score.">
-                    <div style="font:600 0.72rem Arial;color:rgba(255,255,255,0.7);">Cost Efficiency</div>
-                    <div style="font:800 1.2rem Arial;color:{("#1B8C3A" if cost_sc >= 7 else (C2 if cost_sc >= 4 else C_RED))};margin-top:2px;">{cost_sc:.1f}<span style="font:400 0.7rem Arial;color:rgba(255,255,255,0.4);"> / 10</span></div>
-                    <div style="font:400 0.62rem Arial;color:rgba(255,255,255,0.45);margin-top:2px;">vs. full capex baseline</div>
+                <div style="background:white;border-radius:6px;padding:10px 14px;border:1px solid #EBEBEB;border-left:3px solid {C2};">
+                    <div style="font:600 0.72rem Arial;color:{C_GREY};text-transform:uppercase;letter-spacing:0.3px;">Cost Efficiency</div>
+                    <div style="font:800 1.3rem Arial;color:{("#1B8C3A" if cost_sc >= 7 else (C1 if cost_sc >= 4 else C_RED))};margin-top:3px;">{cost_sc:.1f}<span style="font:400 0.75rem Arial;color:{C_GREY};"> / 10</span></div>
+                    <div style="font:400 0.68rem Arial;color:{C_GREY};margin-top:2px;">vs. full capex baseline</div>
                 </div>
-                <div style="background:rgba(255,255,255,0.08);border-radius:6px;padding:8px 12px;" title="Average of feasibility (barriers) and deployment speed (months to operational). Software/behavioral measures score highest.">
-                    <div style="font:600 0.72rem Arial;color:rgba(255,255,255,0.7);">Speed to Value</div>
-                    <div style="font:800 1.2rem Arial;color:{("#1B8C3A" if speed_sc >= 7 else (C2 if speed_sc >= 4 else C_RED))};margin-top:2px;">{speed_sc:.1f}<span style="font:400 0.7rem Arial;color:rgba(255,255,255,0.4);"> / 10</span></div>
-                    <div style="font:400 0.62rem Arial;color:rgba(255,255,255,0.45);margin-top:2px;">Feasibility + deployment</div>
+                <div style="background:white;border-radius:6px;padding:10px 14px;border:1px solid #EBEBEB;border-left:3px solid {C3};">
+                    <div style="font:600 0.72rem Arial;color:{C_GREY};text-transform:uppercase;letter-spacing:0.3px;">Speed to Value</div>
+                    <div style="font:800 1.3rem Arial;color:{("#1B8C3A" if speed_sc >= 7 else (C1 if speed_sc >= 4 else C_RED))};margin-top:3px;">{speed_sc:.1f}<span style="font:400 0.75rem Arial;color:{C_GREY};"> / 10</span></div>
+                    <div style="font:400 0.68rem Arial;color:{C_GREY};margin-top:2px;">Feasibility + deployment</div>
                 </div>
-                <div style="background:rgba(255,255,255,0.08);border-radius:6px;padding:8px 12px;" title="Sustainability benefit per CPUC IRP and NY REV BCA. Behavioral solutions score highest, physical infrastructure lowest.">
-                    <div style="font:600 0.72rem Arial;color:rgba(255,255,255,0.7);">ESG Alignment</div>
-                    <div style="font:800 1.2rem Arial;color:{("#1B8C3A" if esg_sc >= 7 else (C2 if esg_sc >= 4 else C_RED))};margin-top:2px;">{esg_sc:.1f}<span style="font:400 0.7rem Arial;color:rgba(255,255,255,0.4);"> / 10</span></div>
-                    <div style="font:400 0.62rem Arial;color:rgba(255,255,255,0.45);margin-top:2px;">Sustainability benefit</div>
+                <div style="background:white;border-radius:6px;padding:10px 14px;border:1px solid #EBEBEB;border-left:3px solid {C_GREEN};">
+                    <div style="font:600 0.72rem Arial;color:{C_GREY};text-transform:uppercase;letter-spacing:0.3px;">ESG Alignment</div>
+                    <div style="font:800 1.3rem Arial;color:{("#1B8C3A" if esg_sc >= 7 else (C1 if esg_sc >= 4 else C_RED))};margin-top:3px;">{esg_sc:.1f}<span style="font:400 0.75rem Arial;color:{C_GREY};"> / 10</span></div>
+                    <div style="font:400 0.68rem Arial;color:{C_GREY};margin-top:2px;">Sustainability benefit</div>
                 </div>
             </div>
         </div>''', unsafe_allow_html=True)
+        with sb_col2:
+            with st.popover("?"):
+                st.markdown(f'''
+**Grid Relief** ({grid_relief:.1f}/10)  
+Raw improvement: {selected.get('technical_improvement_pct', 0):.1f}% → sigmoid mapping → {grid_relief:.1f}
 
-        # Radar chart comparison
-        col_spacer, col_radar_center, col_spacer2 = st.columns([1, 2, 1])
-        with col_radar_center:
-            cats = ['<b>Grid Relief</b>', '<b>Cost</b>', '<b>Speed</b>', '<b>ESG</b>']
-            vals = [grid_relief, cost_sc, speed_sc, esg_sc]
-            fig = go.Figure()
-            fig.add_trace(go.Scatterpolar(
-                r=vals + [vals[0]], theta=cats + [cats[0]], fill='toself',
-                fillcolor='rgba(216,86,4,0.12)', line=dict(color=C1, width=2.5), name="Selected"
+**Cost Efficiency** ({cost_sc:.1f}/10)  
+`10 × (1 - cost / max_capex_cost)` → {cost_sc:.1f}
+
+**Speed to Value** ({speed_sc:.1f}/10)  
+`(feasibility + deployment_speed) / 2` → {speed_sc:.1f}
+
+**ESG Alignment** ({esg_sc:.1f}/10)  
+Behavioral = 9-10, Hybrid = 7-8, Capex = 4-5
+
+**Final** = 0.40×Relief + 0.25×Cost + 0.20×Speed + 0.15×ESG = **{selected['final_score']:.2f}**
+                ''')
+
+        # Score Waterfall - shows weighted contribution of each dimension to final score
+        col_spacer, col_chart_center, col_spacer2 = st.columns([0.5, 3, 0.5])
+        with col_chart_center:
+            # Weighted contributions
+            w_gr = grid_relief * 0.40
+            w_cost = cost_sc * 0.25
+            w_speed = speed_sc * 0.20
+            w_esg = esg_sc * 0.15
+            final = w_gr + w_cost + w_speed + w_esg
+
+            fig = go.Figure(go.Waterfall(
+                orientation="v",
+                measure=["relative", "relative", "relative", "relative", "total"],
+                x=["<b>Grid Relief</b>", "<b>Cost Efficiency</b>",
+                   "<b>Speed to Value</b>", "<b>ESG Alignment</b>", "<b>Final Score</b>"],
+                y=[w_gr, w_cost, w_speed, w_esg, 0],
+                text=[f"+{w_gr:.2f}", f"+{w_cost:.2f}", f"+{w_speed:.2f}", f"+{w_esg:.2f}", f"<b>{final:.2f}</b>"],
+                textposition="outside",
+                textfont=dict(size=11, family="Arial"),
+                connector=dict(line=dict(color="#DDDDDD", width=1)),
+                increasing=dict(marker=dict(color=C1)),
+                totals=dict(marker=dict(color=C_DARK)),
             ))
-            if len(top10) > 1:
-                runner = top10[1] if selected_idx == 0 else top10[0]
-                r_vals = [
-                    runner.get("grid_relief_score", runner.get("technical_score", 0)),
-                    runner.get("cost_score", 0),
-                    runner.get("speed_to_value_score", (runner.get("feasibility_score", 0) + runner.get("deployment_score", 0)) / 2),
-                    runner.get("esg_score", 8)
-                ]
-                fig.add_trace(go.Scatterpolar(
-                    r=r_vals + [r_vals[0]], theta=cats + [cats[0]], fill='toself',
-                    fillcolor='rgba(100,100,100,0.06)', line=dict(color='#999999', width=1.5, dash='dash'), name="Runner-up"
-                ))
             fig.update_layout(
-                polar=dict(radialaxis=dict(visible=True, range=[0, 10], tickfont=dict(size=9, family="Arial"))),
-                height=270, margin=dict(t=20, b=30, l=40, r=40), paper_bgcolor="white",
-                font=dict(family="Arial", size=11),
-                legend=dict(orientation="h", y=-0.15, x=0.5, xanchor="center", font=dict(family="Arial", size=11))
+                height=270, margin=dict(t=20, b=40, l=40, r=20),
+                plot_bgcolor='white', paper_bgcolor='white',
+                yaxis=dict(title='<b>Weighted Score</b>', title_font=dict(size=10, family='Arial'),
+                           gridcolor='#F0F0F0', tickfont=dict(size=9, family='Arial')),
+                xaxis=dict(tickfont=dict(size=9, family='Arial', color=C_DARK)),
+                font=dict(family='Arial', size=11),
+                showlegend=False
             )
             st.plotly_chart(fig, use_container_width=True)
+            st.markdown(f'<div style="text-align:center;font:400 0.8rem Arial;color:{C_GREY};margin-top:-8px;">Waterfall shows how each weighted dimension builds up to the final composite score.</div>', unsafe_allow_html=True)
 
         # Impact Assessment
         st.markdown(f'<div class="sub-head">Impact Assessment (Grid Relief)</div>', unsafe_allow_html=True)
@@ -727,17 +892,32 @@ if st.session_state.study_data:
         else: sev_txt, sev_clr = "Low", C_GREEN
         st.markdown(f'''<div style="font:400 0.82rem Arial;color:{C_DARK};margin-bottom:8px;">
             <b>Current severity:</b> <b style="color:{sev_clr};">{sev_txt}</b> (score: {stress_val:.0f})
-            &nbsp; <span style="font:400 0.7rem Arial;color:{C_GREY};">Scale: 0 (no issues) - 300 (Low) - 1000 (Moderate) - 3000 (High) - 5000+ (Critical)</span>
         </div>''', unsafe_allow_html=True)
+        with st.popover("ⓘ"):
+            st.markdown(f'''
+**Grid Stress Score**
+
+Composite metric combining equipment overloads and voltage violations across the 24-hour simulation.
+
+**Formula:**  
+`Score = 20×convergence_failures + 5×line_overloads + 6×transformer_overloads + 2×voltage_violations`
+
+**Weights reflect severity:** Convergence failures (20×) indicate near-collapse conditions. Transformer overloads (6×) damage expensive long-lead assets. Line overloads (5×) cause thermal degradation. Voltage violations (2×) affect power quality.
+
+**Scale:**  
+- 0 = No issues | <300 = Low | 300-1000 = Moderate | 1000-3000 = High | >3000 = Critical
+
+Current: **{stress_val:.0f}** ({sev_txt})
+            ''')
 
         ba1, ba2, ba3 = st.columns(3)
-        ba1.markdown(f'''<div class="card" style="border-left:4px solid {C_RED};background:#FFF5F5;">
-            <div class="lbl">Before (No Intervention)</div>
+        ba1.markdown(f'''<div class="card" style="border-left:4px solid {C_RED};">
+            <div class="lbl" style="color:{C_RED};">Before (No Intervention)</div>
             <div class="val">{bs.get('grid_stress_score', 0):.0f}</div>
             <div class="sub">Grid stress score</div>
         </div>''', unsafe_allow_html=True)
-        ba2.markdown(f'''<div class="card" style="border-left:4px solid {C_GREEN};background:#F0FFF4;">
-            <div class="lbl">After (Selected Solution)</div>
+        ba2.markdown(f'''<div class="card" style="border-left:4px solid {C_GREEN};">
+            <div class="lbl" style="color:{C_GREEN};">After (Selected Solution)</div>
             <div class="val">{after_stress:.0f}</div>
             <div class="sub">↓ {impr:.1f}% reduction</div>
         </div>''', unsafe_allow_html=True)
@@ -888,7 +1068,6 @@ if st.session_state.study_data:
             sev_color = C_GREEN
         st.markdown(f'''<div style="font:400 0.85rem Arial;color:{C_DARK};margin:8px 0;">
             <b>Current severity:</b> <b style="color:{sev_color};">{severity_txt}</b> (score: {stress:.0f})
-            &nbsp; <span style="font:400 0.72rem Arial;color:{C_GREY};">Scale: 0 (no issues) - 300 (Low) - 1000 (Moderate) - 3000 (High) - 5000+ (Critical)</span>
         </div>''', unsafe_allow_html=True)
 
         base_results = data.get("base_results", [])
@@ -952,14 +1131,45 @@ if st.session_state.study_data:
             )
             st.plotly_chart(fig3, use_container_width=True)
 
-            st.markdown(f'''<div class="info-box"><div style="font:400 0.85rem Arial;color:{C_DARK};line-height:1.9;">
-                • <b style="color:{C1};">Feeder Multiplier</b> scales all existing loads (morning and evening peaks, 3% annual growth).<br>
-                • <b style="color:{C1};">EV Demand</b> peaks 19:00-22:00 based on US residential charging research. Peak Demand Window (sidebar) controls when interventions are applied, not when EV naturally peaks.<br>
-                • <b style="color:{C1};">Solar Generation</b> bell curve sunrise to sunset, reduces net demand at midday.<br>
-                • <b style="color:{C1};">Data Center</b> near-constant baseload at 97% utilization.
+            st.markdown(f'''<div style="background:white;border-radius:8px;padding:16px 20px;margin:10px 0;border:1px solid #EBEBEB;border-top:3px solid {C1};">
+                <div style="font:700 0.82rem Arial;color:{C_DARK};margin-bottom:10px;">Profile Descriptions</div>
+                <div style="font:400 0.82rem Arial;color:{C_DARK};line-height:2.0;">
+                <span style="display:inline-block;width:6px;height:6px;background:{C_DARK};border-radius:50%;margin-right:8px;vertical-align:middle;"></span><b style="color:{C_DARK};">Feeder Multiplier</b> - Scales all existing loads (morning and evening peaks, 3% annual growth).<br>
+                <span style="display:inline-block;width:6px;height:6px;background:{C1};border-radius:50%;margin-right:8px;vertical-align:middle;"></span><b style="color:{C1};">EV Demand</b> - Peaks 19:00-22:00 based on US residential charging research.<br>
+                <span style="display:inline-block;width:6px;height:6px;background:{C_GREEN};border-radius:50%;margin-right:8px;vertical-align:middle;"></span><b style="color:{C_GREEN};">Solar Generation</b> - Bell curve sunrise to sunset, reduces net demand at midday.<br>
+                <span style="display:inline-block;width:6px;height:6px;background:{C_RED};border-radius:50%;margin-right:8px;vertical-align:middle;"></span><b style="color:{C_RED};">Data Center</b> - Near-constant baseload at 97% utilization.
                 </div>
-                <div style="font:italic 400 0.68rem Arial;color:{C_GREY};margin-top:6px;">
-                <b>Sources:</b> EIA Annual Energy Outlook 2024 (EV growth), SEIA Solar Market Insight 2024 (solar adoption), DOE Grid Deployment Office 2024 (DC load patterns), FERC Form 1 (3% base growth consistent with 2020-2024 US distribution load growth of 2.5-3.5% annually).
+                <div style="font-style:italic;font:400 0.7rem Arial;color:{C_GREY};margin-top:10px;padding-top:8px;border-top:1px solid #EBEBEB;">
+                Sources: EIA Annual Energy Outlook 2024 (EV growth), SEIA Solar Market Insight 2024 (solar adoption), DOE Grid Deployment Office 2024 (DC load patterns), FERC Form 1 (3% base growth consistent with 2020-2024 US distribution load growth of 2.5-3.5% annually).
+                </div>
+            </div>''', unsafe_allow_html=True)
+
+            # AI-generated profile interpretation
+            peak_ev = max(profiles.get("ev_mw", [0]))
+            peak_solar = max(profiles.get("solar_mw", [0]))
+            peak_dc = max(profiles.get("dc_mw", [0]))
+            peak_feeder = max(profiles.get("feeder_mult", [0]))
+            ev_peak_hr = profiles["time"][profiles["ev_mw"].index(peak_ev)] if peak_ev > 0 else "N/A"
+            solar_peak_hr = profiles["time"][profiles["solar_mw"].index(peak_solar)] if peak_solar > 0 else "N/A"
+            # Net demand analysis
+            net_demand = [profiles["feeder_mult"][i] + profiles["ev_mw"][i] + profiles["dc_mw"][i] - profiles["solar_mw"][i]
+                         for i in range(len(profiles["time"]))]
+            peak_net_hr = profiles["time"][net_demand.index(max(net_demand))]
+            min_net_hr = profiles["time"][net_demand.index(min(net_demand))]
+
+            st.markdown(f'''<div style="background:#FFF8F0;border-radius:8px;padding:14px 18px;margin:10px 0;border:1px solid #F5E6D3;border-left:3px solid {C1};">
+                <div style="font:700 0.78rem Arial;color:{C1};margin-bottom:6px;">Profile Summary</div>
+                <div style="font:400 0.82rem Arial;color:{C_DARK};line-height:1.8;">
+                The feeder peaks at <b>{peak_feeder:.2f}x</b> base load during evening hours, compounded by
+                EV charging demand of <b>{peak_ev:.2f} MW</b> (peak at {ev_peak_hr}) and a constant data center
+                draw of <b>{peak_dc:.2f} MW</b>. Solar generation peaks at <b>{peak_solar:.2f} MW</b> ({solar_peak_hr}),
+                providing midday relief but creating a steep ramp from afternoon to evening.
+                <b>Critical window:</b> Net system stress is highest at <b>{peak_net_hr}</b> when EV charging
+                coincides with evening feeder load and solar output has dropped to zero, and lowest at
+                <b>{min_net_hr}</b> during peak solar production.
+                This is why the recommended solution targets peak-hour demand reduction through managed
+                charging and tariff signals - shifting EV load away from the {peak_net_hr} peak directly
+                addresses the highest-stress period without requiring physical infrastructure upgrades.
                 </div>
             </div>''', unsafe_allow_html=True)
 
@@ -968,192 +1178,366 @@ if st.session_state.study_data:
         st.markdown('<div class="sec-head">Planning Decision Memo</div>', unsafe_allow_html=True)
         memo = data.get("memo", "")
         if memo:
-            # Remove duplicate title since we have our own section header
+            # Remove duplicate title and methodology section
             memo_clean = memo.replace("# FeederIQ Planning Decision Memo\n", "").replace("## Executive Summary\n", "").strip()
+            # Strip Methodology section from LLM output
+            import re as _re
+            memo_clean = _re.sub(r'## Methodology.*?(?=## |$)', '', memo_clean, flags=_re.DOTALL).strip()
             st.markdown(f'<div class="memo-area">{memo_clean}</div>', unsafe_allow_html=True)
 
             # Download button for memo as PDF
             st.markdown("---")
 
             def _build_pdf_memo(data, memo_text):
-                """Generate a professional PDF memo with PwC branding."""
+                """Generate a professional 3-4 page PDF memo with PwC branding."""
                 from fpdf import FPDF
                 import io
 
+                # PwC brand colors
+                PWC_ORANGE = (216, 86, 4)
+                PWC_GOLD = (232, 141, 20)
+                PWC_DARK = (45, 45, 45)
+                PWC_GREY = (100, 100, 100)
+                PWC_LIGHT = (248, 248, 248)
+
                 class MemoDoc(FPDF):
                     def header(self):
-                        self.set_font("Helvetica", "B", 18)
-                        self.set_text_color(216, 86, 4)
-                        self.cell(0, 12, "pwc", align="R", new_x="LMARGIN", new_y="NEXT")
-                        self.ln(2)
-                        self.set_draw_color(216, 86, 4)
-                        self.set_line_width(0.5)
-                        self.line(10, self.get_y(), 200, self.get_y())
-                        self.ln(4)
+                        # PwC logo from the same official SVG used in frontend
+                        self.set_draw_color(*PWC_ORANGE)
+                        self.set_line_width(0.8)
+                        self.line(10, 10, 200, 10)
+                        logo_path = Path(__file__).resolve().parent / "assets" / "pwc_logo.svg"
+                        if logo_path.exists():
+                            # Ensure default-colored SVG paths render consistently across pages.
+                            self.set_draw_color(0, 0, 0)
+                            self.set_fill_color(0, 0, 0)
+                            self.set_text_color(0, 0, 0)
+                            self.image(str(logo_path), x=184, y=11.8, w=16)
+                        else:
+                            self.set_font("Times", "B", 14)
+                            self.set_text_color(26, 26, 26)
+                            self.set_y(12)
+                            self.cell(0, 6, "pwc", align="R", new_x="LMARGIN", new_y="NEXT")
+                        self.set_y(18)
 
                     def footer(self):
-                        self.set_y(-15)
-                        self.set_font("Helvetica", "I", 7)
-                        self.set_text_color(100, 100, 100)
-                        self.cell(0, 10, "FeederIQ - Agentic Distribution Planning | PwC Advisory | Confidential", align="C")
+                        self.set_y(-18)
+                        self.set_draw_color(200, 200, 200)
+                        self.set_line_width(0.3)
+                        self.line(10, self.get_y(), 200, self.get_y())
+                        self.ln(3)
+                        self.set_font("Helvetica", "", 7)
+                        self.set_text_color(*PWC_GREY)
+                        self.cell(0, 4, "PwC Advisory  |  FeederIQ Agentic Distribution Planning", new_x="END")
+                        self.cell(0, 4, f"Page {self.page_no()}/{{nb}}", align="R", new_x="LMARGIN", new_y="NEXT")
 
                     def section_title(self, title):
-                        self.set_font("Helvetica", "B", 12)
-                        self.set_text_color(45, 45, 45)
-                        self.ln(4)
+                        self.ln(6)
+                        self.set_font("Helvetica", "B", 13)
+                        self.set_text_color(*PWC_DARK)
                         self.cell(0, 8, title, new_x="LMARGIN", new_y="NEXT")
-                        self.set_draw_color(216, 86, 4)
-                        self.line(10, self.get_y(), 100, self.get_y())
+                        self.set_draw_color(*PWC_ORANGE)
+                        self.set_line_width(0.6)
+                        self.line(10, self.get_y(), 60, self.get_y())
+                        self.ln(5)
+
+                    def subsection_title(self, title):
                         self.ln(3)
-
-                    def key_value(self, key, value):
-                        self.set_font("Helvetica", "B", 9)
-                        self.set_text_color(45, 45, 45)
-                        self.cell(55, 6, key, new_x="END")
-                        self.set_font("Helvetica", "", 9)
-                        self.set_text_color(80, 80, 80)
-                        self.cell(0, 6, str(value), new_x="LMARGIN", new_y="NEXT")
-
-                    def body_text(self, text):
-                        self.set_font("Helvetica", "", 9)
-                        self.set_text_color(50, 50, 50)
-                        self.multi_cell(0, 5, text)
+                        self.set_font("Helvetica", "B", 10)
+                        self.set_text_color(*PWC_DARK)
+                        self.cell(0, 6, title, new_x="LMARGIN", new_y="NEXT")
                         self.ln(2)
 
+                    def body_text(self, text):
+                        self.set_font("Helvetica", "", 9.5)
+                        self.set_text_color(60, 60, 60)
+                        self.multi_cell(0, 5.5, text)
+                        self.ln(2)
+
+                    def table_header(self, cols, widths):
+                        self.set_font("Helvetica", "B", 8.5)
+                        self.set_text_color(*PWC_DARK)
+                        self.set_fill_color(*PWC_LIGHT)
+                        self.set_draw_color(220, 220, 220)
+                        for col, w in zip(cols, widths):
+                            self.cell(w, 7, col, border="B", fill=True, new_x="END")
+                        self.ln()
+
+                    def table_row(self, cells, widths, bold_first=False):
+                        self.set_draw_color(235, 235, 235)
+                        for i, (cell, w) in enumerate(zip(cells, widths)):
+                            if i == 0 and bold_first:
+                                self.set_font("Helvetica", "B", 9)
+                                self.set_text_color(*PWC_DARK)
+                            else:
+                                self.set_font("Helvetica", "", 9)
+                                self.set_text_color(70, 70, 70)
+                            self.cell(w, 6.5, str(cell), border="B", new_x="END")
+                        self.ln()
+
+                    def highlight_box(self, text, color=PWC_ORANGE):
+                        self.set_draw_color(*color)
+                        self.set_line_width(0.4)
+                        x = self.get_x()
+                        y = self.get_y()
+                        self.rect(x, y, 190, 10)
+                        self.set_xy(x + 4, y + 2)
+                        self.set_font("Helvetica", "B", 9.5)
+                        self.set_text_color(*color)
+                        self.cell(0, 6, text)
+                        self.set_xy(x, y + 12)
+
                 pdf = MemoDoc()
-                pdf.set_auto_page_break(auto=True, margin=20)
+                pdf.alias_nb_pages()
+                pdf.set_auto_page_break(auto=True, margin=22)
+
+                # ── PAGE 1: Cover + Executive Summary ──
                 pdf.add_page()
 
-                # Title
-                pdf.set_font("Helvetica", "B", 18)
-                pdf.set_text_color(45, 45, 45)
-                pdf.cell(0, 12, "Planning Decision Memo", new_x="LMARGIN", new_y="NEXT")
-                pdf.set_font("Helvetica", "I", 9)
-                pdf.set_text_color(100, 100, 100)
-                pdf.cell(0, 6, f"Generated: {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}", new_x="LMARGIN", new_y="NEXT")
-                pdf.ln(6)
+                # Document title block
+                pdf.set_font("Helvetica", "B", 24)
+                pdf.set_text_color(*PWC_DARK)
+                pdf.cell(0, 12, "Distribution Planning", new_x="LMARGIN", new_y="NEXT")
+                pdf.set_font("Helvetica", "", 16)
+                pdf.set_text_color(*PWC_GREY)
+                pdf.cell(0, 10, "Decision Memo", new_x="LMARGIN", new_y="NEXT")
+                pdf.ln(3)
+                pdf.set_font("Helvetica", "", 10)
+                pdf.set_text_color(*PWC_GREY)
+                pdf.cell(0, 6, "FeederIQ Agentic Analysis  |  IEEE 123-Bus Test Feeder", new_x="LMARGIN", new_y="NEXT")
+                pdf.cell(0, 6, f"Date: {pd.Timestamp.now().strftime('%B %d, %Y')}", new_x="LMARGIN", new_y="NEXT")
+                pdf.cell(0, 6, "Classification: Confidential", new_x="LMARGIN", new_y="NEXT")
+                pdf.ln(8)
 
-                # Executive Summary
                 scenario = data.get('scenario', {})
                 top_rec = data.get('top_recommendation', {})
                 bs_data = data.get('base_summary', {})
+                ranking = data.get('ranking', [])
+                severity = "Critical" if bs_data.get('grid_stress_score', 0) > 3000 else ("High" if bs_data.get('grid_stress_score', 0) > 1000 else ("Moderate" if bs_data.get('grid_stress_score', 0) > 300 else "Low"))
 
-                pdf.section_title("Executive Summary")
-                severity = "Critical" if bs_data.get('grid_stress_score', 0) > 3000 else ("High" if bs_data.get('grid_stress_score', 0) > 1000 else "Moderate")
+                # Executive Summary
+                pdf.section_title("1. Executive Summary")
                 pdf.body_text(
-                    f"This memo presents results of an agentic distribution planning study analyzing the "
-                    f"IEEE 123-bus feeder under projected {scenario.get('horizon_label', '12m')} growth scenarios. "
-                    f"Baseline grid stress: {bs_data.get('grid_stress_score', 0):.0f} ({severity}). "
-                    f"The recommended solution achieves {top_rec.get('technical_improvement_pct', 0):.1f}% "
-                    f"grid stress reduction with an overall score of {top_rec.get('final_score', 0):.2f}/10."
+                    f"This memo presents findings from an AI-driven distribution planning analysis of the "
+                    f"IEEE 123-bus test feeder under projected load growth over a {scenario.get('horizon_label', '12m')} "
+                    f"planning horizon. The study evaluates the impact of concurrent EV charging growth "
+                    f"({scenario.get('ev_level', 'Base')}), distributed solar adoption ({scenario.get('solar_level', 'Base')}), "
+                    f"and data center interconnection ({scenario.get('dc_level', 'Moderate')}) on feeder hosting capacity."
+                )
+                pdf.body_text(
+                    f"Baseline analysis reveals {severity.lower()}-severity grid stress (score: "
+                    f"{bs_data.get('grid_stress_score', 0):.0f}) with {bs_data.get('total_line_overloads', 0)} line overloads, "
+                    f"{bs_data.get('total_transformer_overloads', 0)} transformer overloads, and "
+                    f"{bs_data.get('total_undervoltage_buses', 0)} undervoltage events across a 24-hour simulation period."
+                )
+                pdf.body_text(
+                    f"The recommended non-wires alternative achieves {top_rec.get('technical_improvement_pct', 0):.1f}% "
+                    f"grid stress reduction with a composite score of {top_rec.get('final_score', 0):.2f}/10, "
+                    f"balancing technical effectiveness, cost efficiency, implementation speed, and sustainability."
                 )
 
-                # Study Configuration - TABLE
-                pdf.section_title("Study Configuration")
-                pdf.set_font("Helvetica", "B", 8)
-                pdf.set_text_color(100, 100, 100)
-                pdf.set_fill_color(245, 245, 245)
-                pdf.cell(70, 6, "Parameter", border=1, fill=True, new_x="END")
-                pdf.cell(60, 6, "Value", border=1, fill=True, new_x="LMARGIN", new_y="NEXT")
-                pdf.set_font("Helvetica", "", 9)
-                pdf.set_text_color(50, 50, 50)
+                # Key Finding highlight
+                pdf.ln(2)
+                nwa_text = ("Non-wires alternatives fully resolve all violations. No traditional capex required."
+                           if data.get('nwa_resolved_all')
+                           else f"Recommended: {top_rec.get('portfolio_name', 'N/A')} - Score: {top_rec.get('final_score', 0):.2f}/10")
+                pdf.highlight_box(nwa_text)
+
+                # ── PAGE 2: Study Configuration + Baseline ──
+                pdf.add_page()
+                pdf.section_title("2. Study Configuration")
+                pdf.body_text(
+                    "The following parameters define the planning scenario under evaluation. "
+                    "Load growth assumptions are sourced from EIA Annual Energy Outlook 2024, "
+                    "SEIA Solar Market Insight Q1 2024, and DOE Grid Deployment Office reports."
+                )
+                widths = [80, 100]
+                pdf.table_header(["Parameter", "Value"], widths)
                 config_rows = [
                     ("Planning Horizon", scenario.get('horizon_label', 'N/A')),
-                    ("EV Growth", scenario.get('ev_level', 'N/A')),
+                    ("EV Growth Scenario", scenario.get('ev_level', 'N/A')),
                     ("Solar Adoption", scenario.get('solar_level', 'N/A')),
                     ("Data Center Load", scenario.get('dc_level', 'N/A')),
-                    ("Data Source", "Real (DOE openEDI)" if scenario.get('use_real_data') else "Synthetic profiles"),
+                    ("Data Source", "Real profiles (DOE openEDI)" if scenario.get('use_real_data') else "Synthetic parametric profiles"),
+                    ("Feeder Model", "IEEE 123-bus (modified)"),
+                    ("Simulation Engine", "OpenDSS QSTS (24h, hourly)"),
+                    ("Portfolios Evaluated", str(len(ranking))),
                 ]
                 for label, val in config_rows:
-                    pdf.cell(70, 6, label, border=1, new_x="END")
-                    pdf.cell(60, 6, str(val), border=1, new_x="LMARGIN", new_y="NEXT")
+                    pdf.table_row([label, val], widths, bold_first=True)
                 pdf.ln(4)
 
                 # Baseline Assessment
-                pdf.section_title("Baseline Assessment")
-                # Use table for clean formatting
-                pdf.set_font("Helvetica", "B", 8)
-                pdf.set_text_color(100, 100, 100)
-                pdf.set_fill_color(245, 245, 245)
-                pdf.cell(70, 6, "Metric", border=1, fill=True, new_x="END")
-                pdf.cell(50, 6, "Value", border=1, fill=True, new_x="LMARGIN", new_y="NEXT")
-                pdf.set_font("Helvetica", "", 9)
-                pdf.set_text_color(50, 50, 50)
+                pdf.section_title("3. Baseline Assessment")
+                pdf.body_text(
+                    "The baseline represents projected feeder conditions at the end of the planning horizon "
+                    "without any intervention. A 24-hour power flow simulation identifies equipment thermal "
+                    "violations, voltage deviations, and composite grid stress."
+                )
+
+                pdf.subsection_title("3.1 Grid Health Metrics")
+                widths_bl = [90, 90]
+                pdf.table_header(["Metric", "Value"], widths_bl)
                 baseline_rows = [
-                    ("Grid Stress Score", f"{bs_data.get('grid_stress_score', 0):.0f} ({severity})"),
-                    ("Line Overloads (24h)", str(bs_data.get('total_line_overloads', 0))),
-                    ("Transformer Overloads (24h)", str(bs_data.get('total_transformer_overloads', 0))),
-                    ("Undervoltage Events", str(bs_data.get('total_undervoltage_buses', 0))),
+                    ("Grid Stress Score", f"{bs_data.get('grid_stress_score', 0):.0f}  ({severity})"),
+                    ("Total Line Overloads (24h)", str(bs_data.get('total_line_overloads', 0))),
+                    ("Total Transformer Overloads (24h)", str(bs_data.get('total_transformer_overloads', 0))),
+                    ("Undervoltage Events (< 0.95 p.u.)", str(bs_data.get('total_undervoltage_buses', 0))),
                     ("Convergence Failures", str(bs_data.get('convergence_failures', 0))),
+                    ("Peak Hour Violations", f"{bs_data.get('peak_overloaded_lines', 'N/A')} lines, {bs_data.get('peak_overloaded_xfmrs', 'N/A')} transformers"),
                 ]
                 for label, val in baseline_rows:
-                    pdf.cell(70, 6, label, border=1, new_x="END")
-                    pdf.cell(50, 6, val, border=1, new_x="LMARGIN", new_y="NEXT")
+                    pdf.table_row([label, val], widths_bl, bold_first=True)
+                pdf.ln(3)
+
+                pdf.subsection_title("3.2 Severity Classification")
+                pdf.body_text(
+                    f"The grid stress score of {bs_data.get('grid_stress_score', 0):.0f} classifies this feeder as "
+                    f"\"{severity}\" severity. The scoring scale is: 0 (no issues), <300 (Low), 300-1000 (Moderate), "
+                    f"1000-3000 (High), >3000 (Critical). At {severity.lower()} severity, intervention is "
+                    f"{'urgently required to prevent equipment damage and service interruptions.' if severity in ('Critical', 'High') else 'recommended to maintain reliability margins.'}"
+                )
+
+                # ── PAGE 3: Recommendation + Scoring ──
+                pdf.add_page()
+                pdf.section_title("4. Recommended Solution")
+
+                pdf.set_font("Helvetica", "B", 12)
+                pdf.set_text_color(*PWC_ORANGE)
+                pdf.cell(0, 8, top_rec.get('portfolio_name', 'N/A'), new_x="LMARGIN", new_y="NEXT")
+                pdf.ln(3)
+
+                pdf.subsection_title("4.1 Score Summary")
+                widths_sc = [80, 50, 50]
+                pdf.table_header(["Dimension", "Score", "Weight"], widths_sc)
+                gr_score = top_rec.get('grid_relief_score', 0)
+                cost_score = top_rec.get('cost_score', 0)
+                speed_score = top_rec.get('speed_to_value_score', 0)
+                esg_score = top_rec.get('esg_score', 0)
+                score_rows = [
+                    ("Grid Relief", f"{gr_score:.1f} / 10", "40%"),
+                    ("Cost Efficiency", f"{cost_score:.1f} / 10", "25%"),
+                    ("Speed to Value", f"{speed_score:.1f} / 10", "20%"),
+                    ("ESG Alignment", f"{esg_score:.1f} / 10", "15%"),
+                ]
+                for label, val, wt in score_rows:
+                    pdf.table_row([label, val, wt], widths_sc, bold_first=True)
+                # Final score row highlighted
+                pdf.set_font("Helvetica", "B", 9.5)
+                pdf.set_text_color(*PWC_ORANGE)
+                pdf.cell(80, 7, "FINAL SCORE", border="TB", new_x="END")
+                pdf.cell(50, 7, f"{top_rec.get('final_score', 0):.2f} / 10", border="TB", new_x="END")
+                pdf.cell(50, 7, "Weighted", border="TB", new_x="LMARGIN", new_y="NEXT")
                 pdf.ln(4)
 
-                # Recommended Solution - TABLE
-                pdf.section_title("Recommended Solution")
-                pdf.set_font("Helvetica", "B", 11)
-                pdf.set_text_color(216, 86, 4)
-                pdf.cell(0, 8, top_rec.get('portfolio_name', 'N/A'), new_x="LMARGIN", new_y="NEXT")
-                pdf.ln(2)
-                pdf.set_font("Helvetica", "B", 8)
-                pdf.set_text_color(100, 100, 100)
-                pdf.set_fill_color(245, 245, 245)
-                pdf.cell(70, 6, "Dimension", border=1, fill=True, new_x="END")
-                pdf.cell(60, 6, "Score", border=1, fill=True, new_x="LMARGIN", new_y="NEXT")
-                pdf.set_font("Helvetica", "", 9)
-                pdf.set_text_color(50, 50, 50)
-                score_rows = [
-                    ("Final Score", f"{top_rec.get('final_score', 0):.2f} / 10"),
-                    ("Grid Relief", f"{top_rec.get('grid_relief_score', 0):.1f} / 10 ({top_rec.get('technical_improvement_pct', 0):.1f}% reduction)"),
-                    ("Cost Efficiency", f"{top_rec.get('cost_score', 0):.1f} / 10"),
-                    ("Speed to Value", f"{top_rec.get('speed_to_value_score', 0):.1f} / 10"),
-                    ("ESG Alignment", f"{top_rec.get('esg_score', 0):.1f} / 10"),
-                ]
-                for label, val in score_rows:
-                    pdf.cell(70, 6, label, border=1, new_x="END")
-                    pdf.cell(60, 6, val, border=1, new_x="LMARGIN", new_y="NEXT")
-                pdf.ln(3)
+                pdf.subsection_title("4.2 Technical Impact")
+                pdf.body_text(
+                    f"The selected portfolio reduces grid stress from {bs_data.get('grid_stress_score', 0):.0f} "
+                    f"to {bs_data.get('grid_stress_score', 0) * (1 - top_rec.get('technical_improvement_pct', 0) / 100):.0f}, "
+                    f"representing a {top_rec.get('technical_improvement_pct', 0):.1f}% improvement. "
+                    f"This reduction is concentrated during peak demand hours when grid stress is most acute."
+                )
                 if data.get('nwa_resolved_all'):
-                    pdf.set_font("Helvetica", "B", 9)
+                    pdf.set_font("Helvetica", "B", 9.5)
                     pdf.set_text_color(27, 140, 58)
-                    pdf.cell(0, 6, "NWA fully resolves all grid violations. No traditional capex required.", new_x="LMARGIN", new_y="NEXT")
+                    pdf.cell(0, 7, "All grid violations fully resolved through non-wires alternatives.", new_x="LMARGIN", new_y="NEXT")
+                    pdf.body_text(
+                        "No traditional infrastructure upgrades (transformer replacements, reconductoring) "
+                        "are required. This represents significant capex avoidance and faster time-to-resolution."
+                    )
                 else:
-                    pdf.set_font("Helvetica", "", 9)
-                    pdf.set_text_color(80, 80, 80)
-                    pdf.cell(0, 6, "Residual violations remain. Hybrid NWA + capex approach recommended.", new_x="LMARGIN", new_y="NEXT")
+                    pdf.body_text(
+                        "Residual violations remain after NWA application. A hybrid approach combining the "
+                        "recommended non-wires portfolio with targeted infrastructure upgrades should be evaluated "
+                        "for full resolution."
+                    )
 
-                # Scoring Methodology
-                pdf.section_title("Scoring Methodology")
-                pdf.set_font("Helvetica", "B", 9)
-                pdf.set_text_color(45, 45, 45)
+                pdf.subsection_title("4.3 Alternative Solutions Considered")
+                widths_alt = [80, 35, 35, 30]
+                pdf.table_header(["Portfolio", "Score", "Relief %", "Rank"], widths_alt)
+                for idx, r in enumerate(ranking[:5]):
+                    pdf.table_row([
+                        r.get('portfolio_name', 'N/A')[:40],
+                        f"{r.get('final_score', 0):.2f}",
+                        f"{r.get('technical_improvement_pct', 0):.1f}%",
+                        f"#{idx + 1}"
+                    ], widths_alt, bold_first=(idx == 0))
+                pdf.ln(3)
+
+                # ── PAGE 4: Methodology + Next Steps ──
+                pdf.add_page()
+                pdf.section_title("5. Methodology")
+
+                pdf.subsection_title("5.1 Scoring Framework")
+                pdf.set_font("Helvetica", "B", 9.5)
+                pdf.set_text_color(*PWC_DARK)
                 pdf.cell(0, 6, "Final Score = 0.40 x Grid Relief + 0.25 x Cost + 0.20 x Speed + 0.15 x ESG", new_x="LMARGIN", new_y="NEXT")
                 pdf.ln(2)
                 pdf.body_text(
-                    "Grid Relief scored using sigmoid normalization reflecting diminishing marginal value "
-                    "of incremental improvement (EPRI methodology). Cost, Speed, and ESG from expert-calibrated "
-                    "intervention matrices per CPUC IRP (D.22-02-004) and NY REV BCA frameworks."
+                    "Grid Relief is scored using sigmoid (logistic) normalization, reflecting the diminishing "
+                    "marginal value of incremental improvement beyond full resolution (EPRI T&D reliability "
+                    "methodology). Cost Efficiency measures implementation cost relative to full capex alternatives. "
+                    "Speed to Value averages regulatory feasibility and deployment timeline scores. "
+                    "ESG Alignment captures sustainability co-benefits per CPUC IRP (D.22-02-004) and NY REV BCA frameworks."
                 )
 
-                # Agent Workflow
-                pdf.section_title("Agent Workflow Log")
+                pdf.subsection_title("5.2 Analytical Pipeline")
+                pdf.body_text(
+                    "The study employs a six-agent LangGraph pipeline: (1) Scenario Agent generates 24-hour "
+                    "load/generation profiles; (2) Simulation Agent runs OpenDSS power flow for each timestep; "
+                    "(3) Constraint Agent identifies thermal and voltage violations; (4) NWA Agent evaluates "
+                    "non-wires alternatives; (5) Capex Agent evaluates traditional infrastructure options; "
+                    "(6) Recommendation Agent performs multi-criteria scoring and ranking."
+                )
+
+                pdf.subsection_title("5.3 Agent Execution Log")
                 for cp in data.get("checkpoints", []):
                     step_name = cp["step"].replace("_", " ").title().replace("Nwa", "NWA")
                     requires_approval = cp.get("requires_approval", False)
-                    # Color coding: green=complete/good, amber=needs attention, red=critical
                     if not requires_approval:
-                        pdf.set_text_color(27, 140, 58)  # green
-                        icon = "[OK]"
+                        pdf.set_text_color(27, 140, 58)
+                        status = "PASS"
                     else:
-                        pdf.set_text_color(216, 86, 4)  # amber/orange
-                        icon = "[!!]"
-                    pdf.set_font("Helvetica", "B", 9)
-                    pdf.cell(0, 5, f"{icon} {step_name}", new_x="LMARGIN", new_y="NEXT")
+                        pdf.set_text_color(*PWC_ORANGE)
+                        status = "FLAG"
+                    pdf.set_font("Helvetica", "B", 8.5)
+                    pdf.cell(18, 5, f"[{status}]", new_x="END")
+                    pdf.set_text_color(*PWC_DARK)
+                    pdf.cell(50, 5, step_name, new_x="END")
                     pdf.set_font("Helvetica", "", 8)
-                    pdf.set_text_color(80, 80, 80)
-                    pdf.multi_cell(0, 4, cp["message"])
-                    pdf.ln(2)
+                    pdf.set_text_color(*PWC_GREY)
+                    # Truncate message to fit on line
+                    msg = cp["message"][:90] + ("..." if len(cp["message"]) > 90 else "")
+                    pdf.cell(0, 5, msg, new_x="LMARGIN", new_y="NEXT")
+
+                pdf.ln(4)
+                pdf.section_title("6. Recommendations & Next Steps")
+                pdf.body_text(
+                    "Based on this analysis, we recommend the following actions:"
+                )
+                next_steps = [
+                    f"1. Proceed with implementation of \"{top_rec.get('portfolio_name', 'N/A')}\" as the primary intervention strategy.",
+                    f"2. Conduct detailed engineering design for the selected measures targeting peak-hour stress reduction.",
+                    "3. Engage regulatory and interconnection teams to confirm feasibility and timeline assumptions.",
+                    "4. Establish monitoring KPIs to validate projected grid relief during initial deployment phase.",
+                    "5. Re-run analysis quarterly as load growth actuals become available to validate planning assumptions.",
+                ]
+                for step in next_steps:
+                    pdf.body_text(step)
+
+                pdf.ln(4)
+                pdf.section_title("7. Disclaimers")
+                pdf.set_font("Helvetica", "I", 8)
+                pdf.set_text_color(*PWC_GREY)
+                use_real = scenario.get('use_real_data', False)
+                data_source_text = ("real measured load profiles from the DOE Open Energy Data Initiative (openEDI)"
+                                   if use_real else "synthetic parametric load growth assumptions")
+                pdf.multi_cell(0, 4.5,
+                    f"This analysis is based on the IEEE 123-bus test feeder model with {data_source_text}. "
+                    "Results are indicative and should be validated against utility-specific asset data, "
+                    "protection coordination studies, and detailed engineering analysis prior to capital commitment. "
+                    "Scoring weights reflect general industry practice and may be adjusted per utility planning criteria."
+                )
 
                 buf = io.BytesIO()
                 pdf.output(buf)
