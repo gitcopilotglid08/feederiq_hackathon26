@@ -4,6 +4,8 @@ FeederIQ – Streamlit Frontend (R3)
 import re
 import time
 import base64
+import json
+from html import escape
 from pathlib import Path
 import requests
 import streamlit as st
@@ -71,8 +73,61 @@ st.markdown(f"""
     .memo-area h1 {{ font-size: 1.05rem; font-weight:700; color:{C_DARK}; }}
     .memo-area h2 {{ font-size: 0.92rem; font-weight:700; color:{C_DARK}; }}
     .memo-area p {{ font-size: 0.85rem; }}
-    .memo-area table {{ font-size: 0.82rem; }}
+    .memo-area table {{
+        font-size: 0.82rem;
+        width: 100%;
+        border-collapse: collapse;
+        border: 1px solid #E7D6C7;
+        margin: 10px 0;
+        background: #FFFEFC;
+    }}
+    .memo-area th {{
+        background: #FFF2E5;
+        color: {C_DARK};
+        border: 1px solid #E7D6C7;
+        padding: 8px 10px;
+        text-align: center;
+        font: 700 0.72rem Arial,sans-serif;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }}
+    .memo-area td {{
+        border: 1px solid #EDE2D8;
+        padding: 8px 10px;
+        color: {C_DARK};
+        vertical-align: top;
+        font: 400 0.8rem Arial,sans-serif;
+    }}
     .memo-area li {{ font-size: 0.82rem; }}
+
+    .lvl-tip {{ position: relative; display: inline-block; margin-left: 6px; }}
+    .lvl-tip summary {{
+        list-style: none;
+        cursor: pointer;
+        color: {C1};
+        font: 700 0.72rem Arial,sans-serif;
+        display: inline;
+        user-select: none;
+    }}
+    .lvl-tip summary::-webkit-details-marker {{ display: none; }}
+    .lvl-tip[open] > div {{
+        position: absolute;
+        z-index: 10;
+        top: 16px;
+        left: -8px;
+        width: 350px;
+        max-width: 52vw;
+        background: #FFFFFF;
+        border: 1px solid #E6D6C8;
+        border-left: 3px solid {C1};
+        border-radius: 8px;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+        padding: 9px 10px;
+        color: {C_DARK};
+        font: 400 0.74rem Arial,sans-serif;
+        line-height: 1.45;
+        white-space: normal;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -99,6 +154,539 @@ def score_bar_html(label, value, max_val=10, tooltip=""):
         <div class="bar"><div class="fill" style="width:{pct}%;background:{bar_color};"></div></div>
         <div class="num" style="color:{bar_color};">{value:.1f} / 10</div>
     </div>'''
+
+
+INTERVENTION_KEYS = ["ManagedCharging", "PhasedInterconnection", "DemandTariff", "Battery", "TransformerUpgrade"]
+INTERVENTION_LABELS = {
+    "ManagedCharging": "Managed EV Charging",
+    "PhasedInterconnection": "Staged Load Connection",
+    "DemandTariff": "Dynamic Tariffs",
+    "Battery": "Battery Storage",
+    "TransformerUpgrade": "Capacity Upgrade",
+}
+
+
+def _level_label(level):
+    lvl = int(level or 0)
+    if lvl >= 100:
+        return "High (100)"
+    if lvl >= 66:
+        return "Medium (66)"
+    if lvl >= 33:
+        return "Low (33)"
+    return "Off (0)"
+
+
+def _active_interventions(portfolio):
+    active = []
+    for k in INTERVENTION_KEYS:
+        lvl = int(portfolio.get(k, 0) or 0)
+        if lvl > 0:
+            active.append({
+                "key": k,
+                "label": INTERVENTION_LABELS.get(k, k),
+                "level": lvl,
+                "level_label": _level_label(lvl),
+            })
+    return active
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _load_strategy_docs():
+    docs_dir = Path(__file__).resolve().parent.parent.parent / "docs"
+    doc_names = ["Intervention explainer.md", "assumptions_rationale.md", "FeederIQ_reference.md"]
+    out = {}
+    for name in doc_names:
+        p = docs_dir / name
+        out[name] = p.read_text(encoding="utf-8") if p.exists() else ""
+    return out
+
+
+def _extract_json_dict(raw_text):
+    if not raw_text:
+        return {}
+    txt = raw_text.strip()
+    txt = re.sub(r'^```(?:json)?\s*', '', txt, flags=re.IGNORECASE)
+    txt = re.sub(r'\s*```$', '', txt)
+    try:
+        parsed = json.loads(txt)
+        return parsed if isinstance(parsed, dict) else {}
+    except Exception:
+        pass
+    m = re.search(r'\{.*\}', txt, flags=re.DOTALL)
+    if not m:
+        return {}
+    try:
+        parsed = json.loads(m.group(0))
+        return parsed if isinstance(parsed, dict) else {}
+    except Exception:
+        return {}
+
+
+def _fallback_implementation_pack(selected):
+    active = _active_interventions(selected)
+    defaults = {
+        "ManagedCharging": {
+            "operating_mechanism": "Shift EV charging from evening peak to off-peak window.",
+            "field_implementation": "Enroll EV customers, integrate EVSE control, and set dispatch schedules.",
+            "timeline": "3-9 months",
+            "dependencies": "AMI interval data, EVSE communications, customer enrollment.",
+            "kpis": "Peak EV MW reduction, evening transformer loading, participation rate.",
+            "risks": "Customer opt-out and limited controllable charger coverage.",
+        },
+        "PhasedInterconnection": {
+            "operating_mechanism": "Stage data center energization to defer near-term peak stress.",
+            "field_implementation": "Revise interconnection agreement with phased commissioning milestones.",
+            "timeline": "4-12 months",
+            "dependencies": "Customer contracting, interconnection studies, metering checkpoints.",
+            "kpis": "Connected MW vs plan, feeder peak delta, deferred capex value.",
+            "risks": "Commercial schedule pressure from large-load customer.",
+        },
+        "DemandTariff": {
+            "operating_mechanism": "Use tariff signals to reduce demand in critical peak periods.",
+            "field_implementation": "Implement TOU/critical-peak tariff, customer comms, and billing updates.",
+            "timeline": "4-14 months",
+            "dependencies": "Regulatory approval, billing configuration, customer response analytics.",
+            "kpis": "Peak period kW reduction, event response rate, bill impact acceptance.",
+            "risks": "Regulatory lead time and uncertain elasticity response.",
+        },
+        "Battery": {
+            "operating_mechanism": "Charge at lower-stress hours and discharge during evening peak.",
+            "field_implementation": "Deploy feeder/distributed BESS with dispatch policy and telemetry.",
+            "timeline": "6-18 months",
+            "dependencies": "Siting, procurement, interconnection, controls commissioning.",
+            "kpis": "Peak shaving MW, voltage support, discharge availability.",
+            "risks": "Permitting lead time and performance degradation assumptions.",
+        },
+        "TransformerUpgrade": {
+            "operating_mechanism": "Increase thermal capacity headroom through conventional reinforcement.",
+            "field_implementation": "Engineer, procure, and replace constrained transformer assets.",
+            "timeline": "12-36 months",
+            "dependencies": "Equipment lead time, outage scheduling, field construction.",
+            "kpis": "Thermal margin increase, overload-hour reduction, SAIDI impact.",
+            "risks": "Long lead times, outage complexity, and capex approval cycle.",
+        },
+    }
+
+    rows = []
+    for item in active:
+        d = defaults.get(item["key"], {})
+        rows.append({
+            "intervention": item["label"],
+            "level": item["level_label"],
+            "operating_mechanism": d.get("operating_mechanism", ""),
+            "field_implementation": d.get("field_implementation", ""),
+            "timeline": d.get("timeline", ""),
+            "dependencies": d.get("dependencies", ""),
+            "kpis": d.get("kpis", ""),
+            "risks": d.get("risks", ""),
+        })
+
+    if not rows:
+        rows.append({
+            "intervention": "No active intervention",
+            "level": "Off (0)",
+            "operating_mechanism": "No portfolio measure selected.",
+            "field_implementation": "No field deployment actions required.",
+            "timeline": "N/A",
+            "dependencies": "N/A",
+            "kpis": "N/A",
+            "risks": "Baseline risk remains unchanged.",
+        })
+
+    return {
+        "summary": f"{selected.get('portfolio_name', 'Selected portfolio')} is delivered through a phased utility program with operational controls, field governance, and measurable reliability KPIs.",
+        "implementation_rows": rows,
+        "governance_rows": [
+            {
+                "workstream": "System Planning",
+                "owner": "Distribution Planning",
+                "deliverable": "Implementation package and feeder impact validation",
+                "timing": "Weeks 0-4",
+            },
+            {
+                "workstream": "Regulatory / Commercial",
+                "owner": "Regulatory + Key Accounts",
+                "deliverable": "Tariff/interconnection approvals and customer commitments",
+                "timing": "Weeks 2-10",
+            },
+            {
+                "workstream": "Operations",
+                "owner": "Grid Operations",
+                "deliverable": "Control activation, KPI monitoring, and monthly review",
+                "timing": "Go-live + ongoing",
+            },
+        ],
+    }
+
+
+@st.cache_data(show_spinner=False, ttl=1800)
+def _generate_implementation_pack(selected, scenario, base_summary, docs_bundle):
+    fallback = _fallback_implementation_pack(selected)
+    active = _active_interventions(selected)
+    if not active:
+        return fallback
+
+    try:
+        from feederiq.backend.llm_client import invoke_llm
+    except Exception:
+        return fallback
+
+    intervention_doc = (docs_bundle.get("Intervention explainer.md", "") or "")[:14000]
+    assumptions_doc = (docs_bundle.get("assumptions_rationale.md", "") or "")[:5000]
+    reference_doc = (docs_bundle.get("FeederIQ_reference.md", "") or "")[:5000]
+
+    system_prompt = """
+You are a PwC electric utility implementation consultant.
+Produce concise, boardroom-quality implementation guidance as STRICT JSON.
+Return only a JSON object with keys:
+- summary: string
+- implementation_rows: list of objects with keys [intervention, level, operating_mechanism, field_implementation, timeline, dependencies, kpis, risks]
+- governance_rows: list of objects with keys [workstream, owner, deliverable, timing]
+Keep wording practical, specific, and grounded in the provided references.
+Do not use markdown.
+"""
+
+    user_context = {
+        "scenario": scenario,
+        "baseline": {
+            "grid_stress_score": base_summary.get("grid_stress_score", 0),
+            "line_overloads": base_summary.get("total_line_overloads", 0),
+            "transformer_overloads": base_summary.get("total_transformer_overloads", 0),
+        },
+        "selected_portfolio": selected,
+        "active_interventions": active,
+        "reference_docs": {
+            "intervention_explainer": intervention_doc,
+            "assumptions": assumptions_doc,
+            "project_reference": reference_doc,
+        },
+    }
+
+    raw = invoke_llm(system_prompt, json.dumps(user_context, indent=2), max_tokens=1800)
+    parsed = _extract_json_dict(raw)
+    if not parsed:
+        return fallback
+
+    rows = parsed.get("implementation_rows") if isinstance(parsed.get("implementation_rows"), list) else []
+    gov_rows = parsed.get("governance_rows") if isinstance(parsed.get("governance_rows"), list) else []
+    if not rows:
+        return fallback
+
+    clean_rows = []
+    required_keys = ["intervention", "level", "operating_mechanism", "field_implementation", "timeline", "dependencies", "kpis", "risks"]
+    for row in rows[:6]:
+        if not isinstance(row, dict):
+            continue
+        clean_rows.append({k: str(row.get(k, "")).strip() for k in required_keys})
+    if not clean_rows:
+        return fallback
+
+    clean_gov_rows = []
+    for row in gov_rows[:4]:
+        if not isinstance(row, dict):
+            continue
+        clean_gov_rows.append({
+            "workstream": str(row.get("workstream", "")).strip(),
+            "owner": str(row.get("owner", "")).strip(),
+            "deliverable": str(row.get("deliverable", "")).strip(),
+            "timing": str(row.get("timing", "")).strip(),
+        })
+
+    return {
+        "summary": str(parsed.get("summary", fallback["summary"])).strip() or fallback["summary"],
+        "implementation_rows": clean_rows,
+        "governance_rows": clean_gov_rows or fallback["governance_rows"],
+    }
+
+
+def _intervention_key_from_label(label):
+    norm = re.sub(r"[^a-z0-9]+", "", str(label or "").lower())
+    mapping = {
+        "managedevcharging": "ManagedCharging",
+        "stagedloadconnection": "PhasedInterconnection",
+        "dynamictariffs": "DemandTariff",
+        "batterystorage": "Battery",
+        "capacityupgrade": "TransformerUpgrade",
+        "managedcharging": "ManagedCharging",
+        "phasedinterconnection": "PhasedInterconnection",
+        "demandtariff": "DemandTariff",
+        "battery": "Battery",
+        "transformerupgrade": "TransformerUpgrade",
+    }
+    return mapping.get(norm, "")
+
+
+def _fallback_intervention_level_guide():
+    return {
+        "ManagedCharging": {
+            "label": "Managed EV Charging",
+            "low": "33: Shift ~15% of evening EV charging (18:00-21:00) to late-night window (00:00-05:00).",
+            "medium": "66: Shift ~30% of evening EV charging to late-night window with stronger control participation.",
+            "high": "100: Shift ~50% of evening EV charging; strongest modeled EV peak reduction.",
+            "implementation": "Programmatic EV control through utility/aggregator dispatch and customer enrollment.",
+        },
+        "PhasedInterconnection": {
+            "label": "Staged Load Connection",
+            "low": "33: Reduce near-term data center load by ~20% via staged energization.",
+            "medium": "66: Reduce near-term data center load by ~40%; significant deferral effect.",
+            "high": "100: Reduce near-term data center load by ~60%; aggressive commissioning phasing.",
+            "implementation": "Interconnection agreement milestones tied to phased commissioning and feeder readiness.",
+        },
+        "DemandTariff": {
+            "label": "Dynamic Tariffs",
+            "low": "33: Reduce feeder demand ~3% during peak window (17:00-20:00).",
+            "medium": "66: Reduce feeder demand ~6% during peak window with stronger price signal.",
+            "high": "100: Reduce feeder demand ~10% during peak window; highest modeled tariff response.",
+            "implementation": "TOU/critical-peak tariff design, customer communication, and billing analytics.",
+        },
+        "Battery": {
+            "label": "Battery Storage",
+            "low": "33: Evening feeder reduction ~4%; midday charging increase ~1%.",
+            "medium": "66: Evening feeder reduction ~8%; midday charging increase ~2%.",
+            "high": "100: Evening feeder reduction ~12%; midday charging increase ~3%.",
+            "implementation": "Feeder/distributed BESS dispatch: charge lower-stress hours, discharge evening peak.",
+        },
+        "TransformerUpgrade": {
+            "label": "Capacity Upgrade",
+            "low": "33: Effective transformer capacity x1.10 and line headroom x1.08.",
+            "medium": "66: Effective transformer capacity x1.20 and line headroom x1.15.",
+            "high": "100: Effective transformer capacity x1.30 and line headroom x1.25.",
+            "implementation": "Conventional reinforcement via targeted asset replacement and thermal headroom expansion.",
+        },
+    }
+
+
+@st.cache_data(show_spinner=False, ttl=1800)
+def _generate_intervention_level_guide(docs_bundle):
+    fallback = _fallback_intervention_level_guide()
+    try:
+        from feederiq.backend.llm_client import invoke_llm
+    except Exception:
+        return fallback
+
+    system_prompt = """
+You are a utility implementation expert.
+Return STRICT JSON only in this shape:
+{
+  "ManagedCharging": {"label": "", "low": "", "medium": "", "high": "", "implementation": ""},
+  "PhasedInterconnection": {...},
+  "DemandTariff": {...},
+  "Battery": {...},
+  "TransformerUpgrade": {...}
+}
+Use the provided intervention explainer as source of truth and keep each field concise.
+"""
+
+    context = {
+        "intervention_reference": (docs_bundle.get("Intervention explainer.md", "") or "")[:16000],
+        "assumptions_reference": (docs_bundle.get("assumptions_rationale.md", "") or "")[:4000],
+    }
+    raw = invoke_llm(system_prompt, json.dumps(context, indent=2), max_tokens=1800)
+    parsed = _extract_json_dict(raw)
+    if not parsed:
+        return fallback
+
+    out = {}
+    required = ["label", "low", "medium", "high", "implementation"]
+    for k in ["ManagedCharging", "PhasedInterconnection", "DemandTariff", "Battery", "TransformerUpgrade"]:
+        row = parsed.get(k)
+        if not isinstance(row, dict):
+            out[k] = fallback[k]
+            continue
+        clean = {rk: str(row.get(rk, fallback[k].get(rk, ""))).strip() for rk in required}
+        out[k] = clean
+    return out
+
+
+def _fallback_implementation_summary(selected, scenario, base_summary):
+    return (
+        f"For the {scenario.get('horizon_label', 'planning')} horizon, the selected portfolio "
+        f"{selected.get('portfolio_name', 'N/A')} is positioned to address a baseline grid stress score of "
+        f"{base_summary.get('grid_stress_score', 0):.0f} through staged controls and operational governance, "
+        "prioritizing near-term reliability relief while preserving optionality for additional reinforcement if growth materializes faster than forecast."
+    )
+
+
+@st.cache_data(show_spinner=False, ttl=1800)
+def _generate_implementation_summary(selected, scenario, base_summary, implementation_pack, docs_bundle):
+    fallback = _fallback_implementation_summary(selected, scenario, base_summary)
+    try:
+        from feederiq.backend.llm_client import invoke_llm
+    except Exception:
+        return fallback
+
+    system_prompt = """
+You are a PwC distribution implementation lead.
+Write one executive paragraph (90-140 words) summarizing implementation approach, dependencies, and expected reliability effect.
+Use only the provided scenario inputs, selected portfolio details, implementation rows, and reference excerpts.
+Do NOT speculate, do NOT add open questions, and do NOT mention unknowns.
+Use plain text only (no bullets, no markdown).
+"""
+
+    context = {
+        "selected_portfolio": selected,
+        "scenario": scenario,
+        "baseline": base_summary,
+        "implementation_rows": implementation_pack.get("implementation_rows", []),
+        "implementation_guidance": implementation_pack.get("summary", ""),
+        "intervention_reference": (docs_bundle.get("Intervention explainer.md", "") or "")[:8000],
+    }
+    raw = invoke_llm(system_prompt, json.dumps(context, indent=2), max_tokens=350)
+    text = (raw or "").strip()
+    if not text:
+        return fallback
+    text = re.sub(r"\s+", " ", text)
+    return text
+
+
+def _fallback_selected_memo(selected, runner_up, scenario, base_summary, ranking_preview, implementation_pack):
+    severity = "Critical" if base_summary.get("grid_stress_score", 0) > 3000 else (
+        "High" if base_summary.get("grid_stress_score", 0) > 1000 else (
+            "Moderate" if base_summary.get("grid_stress_score", 0) > 300 else "Low"
+        )
+    )
+
+    lines = []
+    lines.append("## Executive Summary")
+    lines.append(implementation_pack.get("summary", ""))
+    lines.append("")
+    lines.append("## Planning Scenario")
+    lines.append("| Parameter | Value |")
+    lines.append("|---|---|")
+    lines.append(f"| Planning Horizon | {scenario.get('horizon_label', 'N/A')} |")
+    lines.append(f"| EV Growth | {scenario.get('ev_level', 'N/A')} |")
+    lines.append(f"| Solar Adoption | {scenario.get('solar_level', 'N/A')} |")
+    lines.append(f"| Data Center Load | {scenario.get('dc_level', 'N/A')} |")
+    lines.append("")
+    lines.append("## Baseline Assessment")
+    lines.append("| Metric | Value |")
+    lines.append("|---|---|")
+    lines.append(f"| Grid Stress Score | {base_summary.get('grid_stress_score', 0):.0f} ({severity}) |")
+    lines.append(f"| Line Overloads (24h) | {base_summary.get('total_line_overloads', 0)} |")
+    lines.append(f"| Transformer Overloads (24h) | {base_summary.get('total_transformer_overloads', 0)} |")
+    lines.append(f"| Undervoltage Events | {base_summary.get('total_undervoltage_buses', 0)} |")
+    lines.append("")
+    lines.append("## Selected Solution")
+    lines.append(f"**{selected.get('portfolio_name', 'N/A')}**")
+    lines.append("| Dimension | Score |")
+    lines.append("|---|---|")
+    lines.append(f"| Final Score | {selected.get('final_score', 0):.2f} / 10 |")
+    lines.append(f"| Grid Relief | {selected.get('grid_relief_score', selected.get('technical_score', 0)):.1f} / 10 |")
+    lines.append(f"| Cost Efficiency | {selected.get('cost_score', 0):.1f} / 10 |")
+    lines.append(f"| Speed to Value | {selected.get('speed_to_value_score', 0):.1f} / 10 |")
+    lines.append(f"| ESG Alignment | {selected.get('esg_score', 0):.1f} / 10 |")
+    lines.append(f"| Technical Improvement | {selected.get('technical_improvement_pct', 0):.1f}% |")
+    lines.append("")
+
+    lines.append("## Alternative Options")
+    lines.append("| Portfolio | Final Score | Grid Relief % |")
+    lines.append("|---|---:|---:|")
+    for row in ranking_preview[:5]:
+        lines.append(f"| {row.get('portfolio_name', 'N/A')} | {row.get('final_score', 0):.2f} | {row.get('technical_improvement_pct', 0):.1f}% |")
+    lines.append("")
+
+    lines.append("## Real-World Implementation Plan")
+    lines.append("| Intervention | Level | Field Implementation | Timeline | KPI |")
+    lines.append("|---|---|---|---|---|")
+    for row in implementation_pack.get("implementation_rows", []):
+        lines.append(
+            f"| {row.get('intervention', '')} | {row.get('level', '')} | {row.get('field_implementation', '')} | {row.get('timeline', '')} | {row.get('kpis', '')} |"
+        )
+
+    if runner_up:
+        lines.append("")
+        lines.append(f"Runner-up for governance consideration: **{runner_up.get('portfolio_name', 'N/A')}** at **{runner_up.get('final_score', 0):.2f}/10**.")
+
+    return "\n".join(lines)
+
+
+@st.cache_data(show_spinner=False, ttl=1800)
+def _generate_selected_memo(selected, runner_up, scenario, base_summary, ranking_preview, implementation_pack, docs_bundle):
+    fallback = _fallback_selected_memo(selected, runner_up, scenario, base_summary, ranking_preview, implementation_pack)
+
+    try:
+        from feederiq.backend.llm_client import invoke_llm
+    except Exception:
+        return fallback
+
+    system_prompt = """
+You are a senior PwC distribution planning consultant writing a client-ready memo section.
+Return Markdown only. Use a table-first style for all quantitative information.
+Required sections in this exact order:
+1) ## Executive Summary
+2) ## Planning Scenario (table)
+3) ## Baseline Assessment (table)
+4) ## Selected Solution (table)
+5) ## Alternative Options (table, top 5)
+6) ## Real-World Implementation Plan (table)
+Tone: concise, executive, implementation-ready.
+Do not add a top-level title.
+"""
+
+    context = {
+        "selected_portfolio": selected,
+        "runner_up": runner_up or {},
+        "scenario": scenario,
+        "baseline": base_summary,
+        "ranking_top5": ranking_preview[:5],
+        "implementation_pack": implementation_pack,
+        "intervention_reference": (docs_bundle.get("Intervention explainer.md", "") or "")[:12000],
+    }
+
+    raw = invoke_llm(system_prompt, json.dumps(context, indent=2), max_tokens=2200)
+    text = (raw or "").strip()
+    if not text or "## Executive Summary" not in text:
+        return fallback
+    return text
+
+
+def _implementation_pack_html(pack, selected_name, level_guide=None, summary_text=""):
+    level_guide = level_guide or _fallback_intervention_level_guide()
+    rows_html = []
+    for row in pack.get("implementation_rows", []):
+        iv_key = _intervention_key_from_label(row.get("intervention", ""))
+        guide = level_guide.get(iv_key, {})
+        tip_low = escape(guide.get('low', 'N/A'))
+        tip_med = escape(guide.get('medium', 'N/A'))
+        tip_high = escape(guide.get('high', 'N/A'))
+        tip_impl = escape(guide.get('implementation', 'N/A'))
+        rows_html.append(
+            "<tr>"
+            f"<td style='padding:8px 10px;border-bottom:1px solid #EDEDED;font:700 0.73rem Arial;color:{C_DARK};'>{escape(row.get('intervention', ''))} "
+            "<details class='lvl-tip'><summary>ⓘ</summary>"
+            f"<div><b>Low (33):</b> {tip_low}<br><b>Medium (66):</b> {tip_med}<br><b>High (100):</b> {tip_high}<br><b>Implementation Intent:</b> {tip_impl}</div>"
+            "</details></td>"
+            f"<td style='padding:8px 10px;border-bottom:1px solid #EDEDED;font:600 0.71rem Arial;color:{C1};'>{escape(row.get('level', ''))}</td>"
+            f"<td style='padding:8px 10px;border-bottom:1px solid #EDEDED;font:400 0.73rem Arial;color:{C_DARK};'>{escape(row.get('field_implementation', ''))}</td>"
+            f"<td style='padding:8px 10px;border-bottom:1px solid #EDEDED;font:400 0.73rem Arial;color:{C_DARK};'>{escape(row.get('timeline', ''))}</td>"
+            "</tr>"
+        )
+
+    summary = summary_text or pack.get("summary", "")
+
+    return f'''
+    <div style="background:white;border-radius:10px;padding:15px 18px;margin:12px 0;border:1px solid #E9E2DB;border-top:3px solid {C1};box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+        <div style="font:700 0.9rem Arial;color:{C_DARK};margin-bottom:4px;">Implementation Blueprint: {escape(selected_name)}</div>
+        <table style="width:100%;border-collapse:collapse;background:#FFFDFB;border:1px solid #EFE3D6;">
+            <thead>
+                <tr style="background:#FFF3E7;">
+                    <th style="text-align:center;padding:8px 10px;font:700 0.68rem Arial;color:{C_DARK};text-transform:uppercase;letter-spacing:0.04em;">Intervention</th>
+                    <th style="text-align:center;padding:8px 10px;font:700 0.68rem Arial;color:{C_DARK};text-transform:uppercase;letter-spacing:0.04em;">Level</th>
+                    <th style="text-align:center;padding:8px 10px;font:700 0.68rem Arial;color:{C_DARK};text-transform:uppercase;letter-spacing:0.04em;">Field Implementation</th>
+                    <th style="text-align:center;padding:8px 10px;font:700 0.68rem Arial;color:{C_DARK};text-transform:uppercase;letter-spacing:0.04em;">Timeline</th>
+                </tr>
+            </thead>
+            <tbody>
+                {''.join(rows_html)}
+            </tbody>
+        </table>
+        <div style="margin-top:10px;background:#FFF8EF;border:1px solid #F2DDC8;border-left:3px solid {C1};border-radius:8px;padding:11px 12px;">
+            <div style="font:700 0.76rem Arial;color:{C1};margin-bottom:5px;">Implementation Summary</div>
+            <div style="font:400 0.8rem Arial;color:{C_DARK};line-height:1.65;">{escape(summary)}</div>
+        </div>
+    </div>
+    '''
 
 
 def parse_line_connections():
@@ -732,6 +1320,47 @@ if st.session_state.study_data:
             else:
                 st.info("No solutions use only the selected interventions. Showing all results.")
 
+    if not ranking:
+        st.warning("No ranked solutions available for display.")
+        st.stop()
+
+    # Shared selected solution state across all tabs
+    top10 = ranking[:10]
+    rank_pos = {r.get("portfolio_name", f"row-{i}"): i + 1 for i, r in enumerate(ranking)}
+    top10_by_name = {r.get("portfolio_name", f"row-{i}"): r for i, r in enumerate(top10)}
+
+    if "selected_solution_name" not in st.session_state or st.session_state.selected_solution_name not in top10_by_name:
+        st.session_state.selected_solution_name = top10[0].get("portfolio_name", "")
+
+    selected_solution = top10_by_name.get(st.session_state.selected_solution_name, top10[0])
+    runner_up_solution = next((r for r in ranking if r.get("portfolio_name") != selected_solution.get("portfolio_name")), None)
+
+    # LLM-generated implementation content grounded in project docs
+    docs_bundle = _load_strategy_docs()
+    implementation_pack = _generate_implementation_pack(
+        selected_solution,
+        data.get("scenario", {}),
+        data.get("base_summary", {}),
+        docs_bundle,
+    )
+    selected_memo = _generate_selected_memo(
+        selected_solution,
+        runner_up_solution,
+        data.get("scenario", {}),
+        data.get("base_summary", {}),
+        ranking[:5],
+        implementation_pack,
+        docs_bundle,
+    )
+    intervention_level_guide = _generate_intervention_level_guide(docs_bundle)
+    implementation_summary_text = _generate_implementation_summary(
+        selected_solution,
+        data.get("scenario", {}),
+        data.get("base_summary", {}),
+        implementation_pack,
+        docs_bundle,
+    )
+
     # Tabs
     tab_rec, tab_rank, tab_baseline, tab_profiles, tab_memo = st.tabs([
         "✅ Recommendation", "📊 Rankings", "🔍 Baseline", "📈 Profiles", "📝 Memo"])
@@ -740,14 +1369,42 @@ if st.session_state.study_data:
     with tab_rec:
         st.markdown('<div class="sec-head">Recommended Solution</div>', unsafe_allow_html=True)
 
-        top10 = ranking[:10]
-        selected_idx = st.selectbox(
+        selected_name = st.selectbox(
             "Select solution",
-            range(len(top10)),
-            format_func=lambda i: f"#{i+1}  {top10[i]['portfolio_name']}  (Score: {top10[i]['final_score']:.2f} / 10)",
+            list(top10_by_name.keys()),
+            format_func=lambda name: (
+                f"#{rank_pos.get(name, '?')}  {name}  "
+                f"(Score: {top10_by_name[name].get('final_score', 0):.2f} / 10)"
+            ),
+            key="selected_solution_name",
             label_visibility="collapsed"
         )
-        selected = top10[selected_idx]
+        selected_solution = top10_by_name.get(selected_name, top10[0])
+        runner_up_solution = next((r for r in ranking if r.get("portfolio_name") != selected_solution.get("portfolio_name")), None)
+        implementation_pack = _generate_implementation_pack(
+            selected_solution,
+            data.get("scenario", {}),
+            data.get("base_summary", {}),
+            docs_bundle,
+        )
+        selected_memo = _generate_selected_memo(
+            selected_solution,
+            runner_up_solution,
+            data.get("scenario", {}),
+            data.get("base_summary", {}),
+            ranking[:5],
+            implementation_pack,
+            docs_bundle,
+        )
+        implementation_summary_text = _generate_implementation_summary(
+            selected_solution,
+            data.get("scenario", {}),
+            data.get("base_summary", {}),
+            implementation_pack,
+            docs_bundle,
+        )
+
+        selected = selected_solution
 
         if data.get("nwa_resolved_all"):
             st.success("✅ Non-wires alternatives fully resolve all grid violations. No traditional capex required.")
@@ -1156,6 +1813,7 @@ Current: **{stress_val:.0f}** ({sev_txt})
                          for i in range(len(profiles["time"]))]
             peak_net_hr = profiles["time"][net_demand.index(max(net_demand))]
             min_net_hr = profiles["time"][net_demand.index(min(net_demand))]
+            active_solution_labels = ", ".join([a["label"] for a in _active_interventions(selected_solution)]) or "No active intervention"
 
             st.markdown(f'''<div style="background:#FFF8F0;border-radius:8px;padding:14px 18px;margin:10px 0;border:1px solid #F5E6D3;border-left:3px solid {C1};">
                 <div style="font:700 0.78rem Arial;color:{C1};margin-bottom:6px;">Profile Summary</div>
@@ -1167,28 +1825,47 @@ Current: **{stress_val:.0f}** ({sev_txt})
                 <b>Critical window:</b> Net system stress is highest at <b>{peak_net_hr}</b> when EV charging
                 coincides with evening feeder load and solar output has dropped to zero, and lowest at
                 <b>{min_net_hr}</b> during peak solar production.
-                This is why the recommended solution targets peak-hour demand reduction through managed
-                charging and tariff signals - shifting EV load away from the {peak_net_hr} peak directly
-                addresses the highest-stress period without requiring physical infrastructure upgrades.
+                <b>Selected portfolio linkage:</b> <b>{selected_solution.get('portfolio_name', 'N/A')}</b>
+                applies {active_solution_labels}, focused on reducing the {peak_net_hr} stress window and
+                improving hourly thermal/voltage margins observed in this profile.
                 </div>
             </div>''', unsafe_allow_html=True)
+
+            # Selected-solution implementation details (LLM-generated from intervention references)
+            st.markdown(
+                _implementation_pack_html(
+                    implementation_pack,
+                    selected_solution.get("portfolio_name", "Selected solution"),
+                    intervention_level_guide,
+                    implementation_summary_text,
+                ),
+                unsafe_allow_html=True,
+            )
 
     # ═══ MEMO ═════════════════════════════════════════════════════════════════
     with tab_memo:
         st.markdown('<div class="sec-head">Planning Decision Memo</div>', unsafe_allow_html=True)
-        memo = data.get("memo", "")
+        memo = selected_memo or data.get("memo", "")
         if memo:
-            # Remove duplicate title and methodology section
-            memo_clean = memo.replace("# FeederIQ Planning Decision Memo\n", "").replace("## Executive Summary\n", "").strip()
-            # Strip Methodology section from LLM output
-            import re as _re
-            memo_clean = _re.sub(r'## Methodology.*?(?=## |$)', '', memo_clean, flags=_re.DOTALL).strip()
+            # Remove duplicate title and custom implementation section (rendered once below with tooltips)
+            memo_clean = memo.replace("# FeederIQ Planning Decision Memo\n", "").strip()
+            memo_clean = re.sub(r'## Real-World Implementation Plan.*?(?=## |$)', '', memo_clean, flags=re.DOTALL).strip()
             st.markdown(f'<div class="memo-area">{memo_clean}</div>', unsafe_allow_html=True)
+
+            st.markdown(
+                _implementation_pack_html(
+                    implementation_pack,
+                    selected_solution.get("portfolio_name", "Selected solution"),
+                    intervention_level_guide,
+                    implementation_summary_text,
+                ),
+                unsafe_allow_html=True,
+            )
 
             # Download button for memo as PDF
             st.markdown("---")
 
-            def _build_pdf_memo(data, memo_text):
+            def _build_pdf_memo(data, memo_text, selected_portfolio, implementation_content, implementation_summary):
                 """Generate a professional 3-4 page PDF memo with PwC branding."""
                 from fpdf import FPDF
                 import io
@@ -1198,9 +1875,78 @@ Current: **{stress_val:.0f}** ({sev_txt})
                 PWC_GOLD = (232, 141, 20)
                 PWC_DARK = (45, 45, 45)
                 PWC_GREY = (100, 100, 100)
-                PWC_LIGHT = (248, 248, 248)
+                PWC_LIGHT = (255, 243, 231)
 
                 class MemoDoc(FPDF):
+                    def _safe_text(self, text):
+                        t = str(text or "")
+                        repl = {
+                            "\u2013": "-",
+                            "\u2014": "-",
+                            "\u2018": "'",
+                            "\u2019": "'",
+                            "\u201c": '"',
+                            "\u201d": '"',
+                            "\u2026": "...",
+                            "\u00a0": " ",
+                            "\u2009": " ",
+                            "\u200b": "",
+                            "\ufeff": "",
+                            "\u2265": ">=",
+                            "\u2264": "<=",
+                            "\u2192": "->",
+                            "\u00b1": "+/-",
+                            "\u2022": "-",
+                        }
+                        for src, dst in repl.items():
+                            t = t.replace(src, dst)
+                        t = re.sub(r"\s+", " ", t).strip()
+                        return t.encode("latin-1", "replace").decode("latin-1")
+
+                    def _fit_text(self, text, width_mm):
+                        txt = self._safe_text(text)
+                        if self.get_string_width(txt) <= max(2, width_mm - 2):
+                            return txt
+                        suffix = "..."
+                        while txt and self.get_string_width(txt + suffix) > max(2, width_mm - 2):
+                            txt = txt[:-1]
+                        return (txt + suffix) if txt else suffix
+
+                    def _wrap_text(self, text, width_mm):
+                        txt = self._safe_text(text)
+                        if not txt:
+                            return [""]
+                        max_w = max(2, width_mm)
+                        words = txt.split(" ")
+                        lines = []
+                        current = ""
+
+                        for word in words:
+                            candidate = word if not current else f"{current} {word}"
+                            if self.get_string_width(candidate) <= max_w:
+                                current = candidate
+                                continue
+
+                            if current:
+                                lines.append(current)
+                                current = ""
+
+                            # Break very long tokens if needed.
+                            token = ""
+                            for ch in word:
+                                cand = token + ch
+                                if self.get_string_width(cand) <= max_w:
+                                    token = cand
+                                else:
+                                    if token:
+                                        lines.append(token)
+                                    token = ch
+                            current = token
+
+                        if current:
+                            lines.append(current)
+                        return lines or [""]
+
                     def header(self):
                         # PwC logo from the same official SVG used in frontend
                         self.set_draw_color(*PWC_ORANGE)
@@ -1235,7 +1981,7 @@ Current: **{stress_val:.0f}** ({sev_txt})
                         self.ln(6)
                         self.set_font("Helvetica", "B", 13)
                         self.set_text_color(*PWC_DARK)
-                        self.cell(0, 8, title, new_x="LMARGIN", new_y="NEXT")
+                        self.cell(0, 8, self._safe_text(title), new_x="LMARGIN", new_y="NEXT")
                         self.set_draw_color(*PWC_ORANGE)
                         self.set_line_width(0.6)
                         self.line(10, self.get_y(), 60, self.get_y())
@@ -1245,35 +1991,66 @@ Current: **{stress_val:.0f}** ({sev_txt})
                         self.ln(3)
                         self.set_font("Helvetica", "B", 10)
                         self.set_text_color(*PWC_DARK)
-                        self.cell(0, 6, title, new_x="LMARGIN", new_y="NEXT")
+                        self.cell(0, 6, self._safe_text(title), new_x="LMARGIN", new_y="NEXT")
                         self.ln(2)
 
                     def body_text(self, text):
                         self.set_font("Helvetica", "", 9.5)
                         self.set_text_color(60, 60, 60)
-                        self.multi_cell(0, 5.5, text)
+                        self.multi_cell(0, 5.5, self._safe_text(text))
                         self.ln(2)
 
                     def table_header(self, cols, widths):
                         self.set_font("Helvetica", "B", 8.5)
                         self.set_text_color(*PWC_DARK)
                         self.set_fill_color(*PWC_LIGHT)
-                        self.set_draw_color(220, 220, 220)
+                        self.set_draw_color(229, 208, 186)
+                        self.set_x(self.l_margin)
                         for col, w in zip(cols, widths):
-                            self.cell(w, 7, col, border="B", fill=True, new_x="END")
-                        self.ln()
+                            self.cell(w, 7, self._fit_text(col, w), border=1, fill=True, align="C")
+                        self.ln(7)
 
-                    def table_row(self, cells, widths, bold_first=False):
-                        self.set_draw_color(235, 235, 235)
+                    def table_row(self, cells, widths, bold_first=False, aligns=None):
+                        aligns = aligns or ["L"] * len(cells)
+                        self.set_draw_color(235, 222, 209)
+                        line_h = 4.1
+
+                        wrapped = []
+                        max_lines = 1
                         for i, (cell, w) in enumerate(zip(cells, widths)):
+                            if i == 0 and bold_first:
+                                self.set_font("Helvetica", "B", 9)
+                            else:
+                                self.set_font("Helvetica", "", 9)
+                            lines = self._wrap_text(cell, w - 2)
+                            wrapped.append(lines)
+                            max_lines = max(max_lines, len(lines))
+
+                        row_h = max(6.5, max_lines * line_h + 2)
+                        y0 = self.get_y()
+                        self.set_x(self.l_margin)
+
+                        for i, (lines, w) in enumerate(zip(wrapped, widths)):
+                            x = self.get_x()
+                            self.rect(x, y0, w, row_h)
+
                             if i == 0 and bold_first:
                                 self.set_font("Helvetica", "B", 9)
                                 self.set_text_color(*PWC_DARK)
                             else:
                                 self.set_font("Helvetica", "", 9)
                                 self.set_text_color(70, 70, 70)
-                            self.cell(w, 6.5, str(cell), border="B", new_x="END")
-                        self.ln()
+
+                            align = aligns[i] if i < len(aligns) else "L"
+                            block_h = len(lines) * line_h
+                            y_txt = y0 + (row_h - block_h) / 2
+                            for j, ln in enumerate(lines):
+                                self.set_xy(x + 1, y_txt + j * line_h)
+                                self.cell(w - 2, line_h, ln, border=0, align=align)
+
+                            self.set_xy(x + w, y0)
+
+                        self.set_xy(self.l_margin, y0 + row_h)
 
                     def highlight_box(self, text, color=PWC_ORANGE):
                         self.set_draw_color(*color)
@@ -1284,7 +2061,7 @@ Current: **{stress_val:.0f}** ({sev_txt})
                         self.set_xy(x + 4, y + 2)
                         self.set_font("Helvetica", "B", 9.5)
                         self.set_text_color(*color)
-                        self.cell(0, 6, text)
+                        self.cell(0, 6, self._safe_text(text))
                         self.set_xy(x, y + 12)
 
                 pdf = MemoDoc()
@@ -1310,9 +2087,18 @@ Current: **{stress_val:.0f}** ({sev_txt})
                 pdf.ln(8)
 
                 scenario = data.get('scenario', {})
-                top_rec = data.get('top_recommendation', {})
+                top_rec = selected_portfolio or data.get('top_recommendation', {})
                 bs_data = data.get('base_summary', {})
                 ranking = data.get('ranking', [])
+                ranking_by_name = {r.get('portfolio_name', ''): idx + 1 for idx, r in enumerate(ranking)}
+                ordered_alternatives = [top_rec] + [
+                    r for r in ranking if r.get('portfolio_name') != top_rec.get('portfolio_name')
+                ]
+
+                def _clip(text, max_len=42):
+                    t = str(text)
+                    return t if len(t) <= max_len else (t[: max_len - 3] + "...")
+
                 severity = "Critical" if bs_data.get('grid_stress_score', 0) > 3000 else ("High" if bs_data.get('grid_stress_score', 0) > 1000 else ("Moderate" if bs_data.get('grid_stress_score', 0) > 300 else "Low"))
 
                 # Executive Summary
@@ -1376,7 +2162,7 @@ Current: **{stress_val:.0f}** ({sev_txt})
                 )
 
                 pdf.subsection_title("3.1 Grid Health Metrics")
-                widths_bl = [90, 90]
+                widths_bl = [118, 72]
                 pdf.table_header(["Metric", "Value"], widths_bl)
                 baseline_rows = [
                     ("Grid Stress Score", f"{bs_data.get('grid_stress_score', 0):.0f}  ({severity})"),
@@ -1391,12 +2177,18 @@ Current: **{stress_val:.0f}** ({sev_txt})
                 pdf.ln(3)
 
                 pdf.subsection_title("3.2 Severity Classification")
-                pdf.body_text(
-                    f"The grid stress score of {bs_data.get('grid_stress_score', 0):.0f} classifies this feeder as "
-                    f"\"{severity}\" severity. The scoring scale is: 0 (no issues), <300 (Low), 300-1000 (Moderate), "
-                    f"1000-3000 (High), >3000 (Critical). At {severity.lower()} severity, intervention is "
-                    f"{'urgently required to prevent equipment damage and service interruptions.' if severity in ('Critical', 'High') else 'recommended to maintain reliability margins.'}"
-                )
+                widths_sev = [120, 70]
+                pdf.table_header(["Classification Rule", "Assessment"], widths_sev)
+                sev_rows = [
+                    ("0-299", "Low"),
+                    ("300-1000", "Moderate"),
+                    ("1001-3000", "High"),
+                    (">3000", "Critical"),
+                    (f"Current score: {bs_data.get('grid_stress_score', 0):.0f}", severity),
+                ]
+                for idx, (rule, cls) in enumerate(sev_rows):
+                    pdf.table_row([rule, cls], widths_sev, bold_first=(idx == 4))
+                pdf.ln(2)
 
                 # ── PAGE 3: Recommendation + Scoring ──
                 pdf.add_page()
@@ -1421,109 +2213,121 @@ Current: **{stress_val:.0f}** ({sev_txt})
                     ("ESG Alignment", f"{esg_score:.1f} / 10", "15%"),
                 ]
                 for label, val, wt in score_rows:
-                    pdf.table_row([label, val, wt], widths_sc, bold_first=True)
-                # Final score row highlighted
-                pdf.set_font("Helvetica", "B", 9.5)
-                pdf.set_text_color(*PWC_ORANGE)
-                pdf.cell(80, 7, "FINAL SCORE", border="TB", new_x="END")
-                pdf.cell(50, 7, f"{top_rec.get('final_score', 0):.2f} / 10", border="TB", new_x="END")
-                pdf.cell(50, 7, "Weighted", border="TB", new_x="LMARGIN", new_y="NEXT")
+                    pdf.table_row([label, val, wt], widths_sc, bold_first=True, aligns=["L", "R", "R"])
+                pdf.table_row([
+                    "FINAL SCORE",
+                    f"{top_rec.get('final_score', 0):.2f} / 10",
+                    "Weighted",
+                ], widths_sc, bold_first=True, aligns=["L", "R", "R"])
                 pdf.ln(4)
 
                 pdf.subsection_title("4.2 Technical Impact")
-                pdf.body_text(
-                    f"The selected portfolio reduces grid stress from {bs_data.get('grid_stress_score', 0):.0f} "
-                    f"to {bs_data.get('grid_stress_score', 0) * (1 - top_rec.get('technical_improvement_pct', 0) / 100):.0f}, "
-                    f"representing a {top_rec.get('technical_improvement_pct', 0):.1f}% improvement. "
-                    f"This reduction is concentrated during peak demand hours when grid stress is most acute."
-                )
+                stress_before = bs_data.get('grid_stress_score', 0)
+                stress_after = stress_before * (1 - top_rec.get('technical_improvement_pct', 0) / 100)
+                widths_impact = [95, 85]
+                pdf.table_header(["Impact Metric", "Value"], widths_impact)
+                impact_rows = [
+                    ("Baseline Grid Stress", f"{stress_before:.0f}"),
+                    ("Post-Solution Grid Stress", f"{stress_after:.0f}"),
+                    ("Technical Improvement", f"{top_rec.get('technical_improvement_pct', 0):.1f}%"),
+                    ("Residual Severity", "Resolved" if data.get('nwa_resolved_all') else "Residual constraints remain"),
+                ]
+                for label, val in impact_rows:
+                    pdf.table_row([label, val], widths_impact, bold_first=True, aligns=["L", "R"])
+                pdf.ln(2)
                 if data.get('nwa_resolved_all'):
                     pdf.set_font("Helvetica", "B", 9.5)
                     pdf.set_text_color(27, 140, 58)
                     pdf.cell(0, 7, "All grid violations fully resolved through non-wires alternatives.", new_x="LMARGIN", new_y="NEXT")
-                    pdf.body_text(
-                        "No traditional infrastructure upgrades (transformer replacements, reconductoring) "
-                        "are required. This represents significant capex avoidance and faster time-to-resolution."
-                    )
                 else:
-                    pdf.body_text(
-                        "Residual violations remain after NWA application. A hybrid approach combining the "
-                        "recommended non-wires portfolio with targeted infrastructure upgrades should be evaluated "
-                        "for full resolution."
-                    )
+                    pdf.set_font("Helvetica", "B", 9.2)
+                    pdf.set_text_color(*PWC_ORANGE)
+                    pdf.cell(0, 6, "Residual violations require targeted follow-on mitigation.", new_x="LMARGIN", new_y="NEXT")
+                pdf.set_text_color(*PWC_DARK)
+                pdf.ln(1)
 
                 pdf.subsection_title("4.3 Alternative Solutions Considered")
-                widths_alt = [80, 35, 35, 30]
+                widths_alt = [108, 28, 28, 26]
                 pdf.table_header(["Portfolio", "Score", "Relief %", "Rank"], widths_alt)
-                for idx, r in enumerate(ranking[:5]):
+                for idx, r in enumerate(ordered_alternatives[:5]):
+                    name = r.get('portfolio_name', 'N/A')
                     pdf.table_row([
-                        r.get('portfolio_name', 'N/A')[:40],
+                        _clip(name, 44),
                         f"{r.get('final_score', 0):.2f}",
                         f"{r.get('technical_improvement_pct', 0):.1f}%",
-                        f"#{idx + 1}"
-                    ], widths_alt, bold_first=(idx == 0))
+                        f"#{ranking_by_name.get(name, idx + 1)}"
+                    ], widths_alt, bold_first=(idx == 0), aligns=["L", "R", "R", "R"])
                 pdf.ln(3)
+
+                pdf.subsection_title("4.4 Real-World Implementation Plan")
+                impl_rows = implementation_content.get("implementation_rows", []) if isinstance(implementation_content, dict) else []
+                widths_impl = [46, 22, 92, 30]
+                pdf.table_header(["Intervention", "Level", "Field Implementation", "Timeline"], widths_impl)
+                for row in impl_rows[:6]:
+                    pdf.table_row([
+                        row.get("intervention", ""),
+                        row.get("level", ""),
+                        row.get("field_implementation", ""),
+                        row.get("timeline", ""),
+                    ], widths_impl, bold_first=True)
+                pdf.ln(2)
+                pdf.body_text(implementation_summary)
 
                 # ── PAGE 4: Methodology + Next Steps ──
                 pdf.add_page()
                 pdf.section_title("5. Methodology")
 
                 pdf.subsection_title("5.1 Scoring Framework")
-                pdf.set_font("Helvetica", "B", 9.5)
-                pdf.set_text_color(*PWC_DARK)
-                pdf.cell(0, 6, "Final Score = 0.40 x Grid Relief + 0.25 x Cost + 0.20 x Speed + 0.15 x ESG", new_x="LMARGIN", new_y="NEXT")
+                widths_fw = [85, 30, 75]
+                pdf.table_header(["Dimension", "Weight", "Method"], widths_fw)
+                framework_rows = [
+                    ("Grid Relief", "40%", "Sigmoid-normalized technical improvement"),
+                    ("Cost Efficiency", "25%", "Relative to full capex alternative"),
+                    ("Speed to Value", "20%", "Average of feasibility and deployment speed"),
+                    ("ESG Alignment", "15%", "Sustainability and material-intensity benefit"),
+                ]
+                for row in framework_rows:
+                    pdf.table_row(list(row), widths_fw, bold_first=True, aligns=["L", "C", "L"])
                 pdf.ln(2)
-                pdf.body_text(
-                    "Grid Relief is scored using sigmoid (logistic) normalization, reflecting the diminishing "
-                    "marginal value of incremental improvement beyond full resolution (EPRI T&D reliability "
-                    "methodology). Cost Efficiency measures implementation cost relative to full capex alternatives. "
-                    "Speed to Value averages regulatory feasibility and deployment timeline scores. "
-                    "ESG Alignment captures sustainability co-benefits per CPUC IRP (D.22-02-004) and NY REV BCA frameworks."
-                )
 
                 pdf.subsection_title("5.2 Analytical Pipeline")
-                pdf.body_text(
-                    "The study employs a six-agent LangGraph pipeline: (1) Scenario Agent generates 24-hour "
-                    "load/generation profiles; (2) Simulation Agent runs OpenDSS power flow for each timestep; "
-                    "(3) Constraint Agent identifies thermal and voltage violations; (4) NWA Agent evaluates "
-                    "non-wires alternatives; (5) Capex Agent evaluates traditional infrastructure options; "
-                    "(6) Recommendation Agent performs multi-criteria scoring and ranking."
-                )
+                widths_pipe = [35, 55, 100]
+                pdf.table_header(["Step", "Agent", "Output"], widths_pipe)
+                pipeline_rows = [
+                    ("1", "Scenario", "24-hour load and DER profiles"),
+                    ("2", "Simulation", "OpenDSS hourly power-flow results"),
+                    ("3", "Constraint", "Thermal and voltage violation summary"),
+                    ("4", "NWA", "Non-wires portfolio evaluation"),
+                    ("5", "Capex", "Conventional reinforcement benchmark"),
+                    ("6", "Recommendation", "Ranked portfolio and decision memo"),
+                ]
+                for row in pipeline_rows:
+                    pdf.table_row(list(row), widths_pipe, aligns=["C", "L", "L"])
+                pdf.ln(2)
 
                 pdf.subsection_title("5.3 Agent Execution Log")
+                widths_log = [20, 40, 130]
+                pdf.table_header(["Status", "Step", "Message"], widths_log)
                 for cp in data.get("checkpoints", []):
                     step_name = cp["step"].replace("_", " ").title().replace("Nwa", "NWA")
                     requires_approval = cp.get("requires_approval", False)
-                    if not requires_approval:
-                        pdf.set_text_color(27, 140, 58)
-                        status = "PASS"
-                    else:
-                        pdf.set_text_color(*PWC_ORANGE)
-                        status = "FLAG"
-                    pdf.set_font("Helvetica", "B", 8.5)
-                    pdf.cell(18, 5, f"[{status}]", new_x="END")
-                    pdf.set_text_color(*PWC_DARK)
-                    pdf.cell(50, 5, step_name, new_x="END")
-                    pdf.set_font("Helvetica", "", 8)
-                    pdf.set_text_color(*PWC_GREY)
-                    # Truncate message to fit on line
-                    msg = cp["message"][:90] + ("..." if len(cp["message"]) > 90 else "")
-                    pdf.cell(0, 5, msg, new_x="LMARGIN", new_y="NEXT")
+                    status = "PASS" if not requires_approval else "FLAG"
+                    msg = _clip(cp.get("message", ""), 78)
+                    pdf.table_row([status, step_name, msg], widths_log, aligns=["C", "L", "L"])
 
                 pdf.ln(4)
                 pdf.section_title("6. Recommendations & Next Steps")
-                pdf.body_text(
-                    "Based on this analysis, we recommend the following actions:"
-                )
+                widths_ns = [18, 122, 50]
+                pdf.table_header(["#", "Action", "Timing"], widths_ns)
                 next_steps = [
-                    f"1. Proceed with implementation of \"{top_rec.get('portfolio_name', 'N/A')}\" as the primary intervention strategy.",
-                    f"2. Conduct detailed engineering design for the selected measures targeting peak-hour stress reduction.",
-                    "3. Engage regulatory and interconnection teams to confirm feasibility and timeline assumptions.",
-                    "4. Establish monitoring KPIs to validate projected grid relief during initial deployment phase.",
-                    "5. Re-run analysis quarterly as load growth actuals become available to validate planning assumptions.",
+                    ("1", f"Proceed with implementation of '{top_rec.get('portfolio_name', 'N/A')}' as primary portfolio.", "0-30 days"),
+                    ("2", "Complete engineering and controls design for selected interventions.", "30-90 days"),
+                    ("3", "Secure regulatory/interconnection approvals and customer commitments.", "60-120 days"),
+                    ("4", "Launch KPI dashboard for stress reduction and reliability tracking.", "Go-live + monthly"),
+                    ("5", "Re-run study with updated growth actuals and program performance.", "Quarterly"),
                 ]
-                for step in next_steps:
-                    pdf.body_text(step)
+                for row in next_steps:
+                    pdf.table_row(list(row), widths_ns, aligns=["C", "L", "L"])
 
                 pdf.ln(4)
                 pdf.section_title("7. Disclaimers")
@@ -1544,7 +2348,7 @@ Current: **{stress_val:.0f}** ({sev_txt})
                 buf.seek(0)
                 return buf.getvalue()
 
-            pdf_bytes = _build_pdf_memo(data, memo)
+            pdf_bytes = _build_pdf_memo(data, memo, selected_solution, implementation_pack, implementation_summary_text)
             st.download_button(
                 "📥 Download Decision Memo (.pdf)",
                 data=pdf_bytes,

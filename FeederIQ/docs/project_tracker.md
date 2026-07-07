@@ -206,6 +206,11 @@ The framework inherently favors NWA because:
 - [x] Shared PwC logo asset integrated across Streamlit and PDF; placement/size tuned for visual consistency.
 - [x] PDF header spacing reduced and logo rendering stabilized across all pages.
 - [x] Recommendation memo prompt updated to exclude "Implementation Next Steps" section.
+- [x] Recommendation/Profile/Memo tabs now stay synchronized to the same selected portfolio.
+- [x] Added LLM-driven real-world intervention blueprint (with level guide) in Profiles and Memo views.
+- [x] Replaced non-functional hover title tooltips with clickable inline info popups for intervention levels.
+- [x] PDF table rendering refactor: multiline row wrapping, stable row geometry, centered headers, and right-aligned metric/value columns.
+- [x] Simplified PDF Section 4.4 implementation table: removed Primary KPI column and preserved full Field Implementation text (no forced clipping).
 - [ ] Deploy to cloud / containerize.
 
 ---

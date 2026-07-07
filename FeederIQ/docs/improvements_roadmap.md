@@ -22,6 +22,11 @@
 | PDF header spacing + logo consistency | Reduced dead space and stabilized logo rendering on all pages | ✅ Done |
 | Bedrock model upgrade | Default model moved to Claude 3.5 Sonnet v2 (`us.anthropic.claude-3-5-sonnet-20241022-v2:0`) | ✅ Done |
 | Memo prompt cleanup | Recommendation memo now excludes "Implementation Next Steps" section | ✅ Done |
+| Cross-tab solution sync | Recommendation selector now refreshes Profiles and Memo content from the same selected portfolio | ✅ Done |
+| LLM intervention blueprint | Added doc-grounded implementation tables + summaries for selected portfolio in Profiles/Memo | ✅ Done |
+| Implementation level tooltip fix | Replaced unreliable hover title with clickable inline detail popup in implementation table | ✅ Done |
+| PDF table quality upgrade | Multiline wrapped rows, centered table headers, and right-aligned metric/value columns for consulting-grade readability | ✅ Done |
+| Section 4.4 table simplification | Removed Primary KPI column and retained full Field Implementation text (no trimming) | ✅ Done |
 
 ---
 
