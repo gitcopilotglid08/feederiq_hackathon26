@@ -22,32 +22,41 @@ cd /workspaces/feederiq_hackathon26/FeederIQ
 pip install -r requirements.txt
 ```
 
-**Run the Backend:**
+### Reliable 2-Terminal Run Flow (Codespaces)
 
-If port 8000 is already in use, kill the existing process first:
+Use this exact sequence before demos/submission.
 
-```bash
-fuser -k 8000/tcp
-```
-
-Then start:
+1. Start backend in terminal 1:
 
 ```bash
 cd /workspaces/feederiq_hackathon26/FeederIQ
+fuser -k 8000/tcp || true
 python scripts/run_backend.py
 ```
 
-**Run the Frontend** (separate terminal):
+2. Start frontend in terminal 2:
 
 ```bash
 cd /workspaces/feederiq_hackathon26/FeederIQ
+fuser -k 8501/tcp || true
 python scripts/run_frontend.py
 ```
 
-- Backend: **http://localhost:8000**
-- Frontend: **http://localhost:8501**
+The startup scripts now auto-set port visibility in Codespaces:
 
-> In Codespaces, use the **Ports** tab to open forwarded URLs in your browser.
+- `run_backend.py` sets port `8000` to public
+- `run_frontend.py` sets port `8501` to public
+
+3. Open URLs:
+
+- Local frontend: **http://localhost:8501**
+- Public frontend: **https://$CODESPACE_NAME-8501.app.github.dev/**
+
+If `gh` is not authenticated or the public URL still returns 404, run once:
+
+```bash
+gh codespace ports visibility 8000:public 8501:public -c "$CODESPACE_NAME"
+```
 
 ---
 
