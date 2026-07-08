@@ -910,8 +910,8 @@ def render_before_after_map(improvement_pct):
                         colors.append(C2)
                         sizes.append(6)
                 else:
-                    colors.append("#BBBBBB")
-                    sizes.append(4)
+                    colors.append(C_GREEN)
+                    sizes.append(6)
 
         fig.add_trace(go.Scatter(x=xs, y=ys, mode='markers',
                                   marker=dict(size=sizes, color=colors, line=dict(width=0.5, color='white')),
