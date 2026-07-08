@@ -128,6 +128,14 @@ st.markdown(f"""
         line-height: 1.45;
         white-space: normal;
     }}
+
+    /* Defensive guard: ensure only active tab panel is visible. */
+    [data-baseweb="tab-panel"][aria-hidden="true"],
+    [data-baseweb="tab-panel"][hidden],
+    [role="tabpanel"][aria-hidden="true"],
+    [role="tabpanel"][hidden] {{
+        display: none !important;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1271,6 +1279,7 @@ if st.session_state.running and st.session_state.study_data is None:
     if st.button("▶  View Results", key="view_results_btn"):
         st.session_state.running = False
         st.session_state.scroll_to_top_once = True
+        st.session_state.results_section = "✅ Recommendation"
         st.rerun()
     st.stop()  # Prevent anything below from rendering while on this page
 
@@ -1279,17 +1288,35 @@ if st.session_state.study_data:
     if st.session_state.scroll_to_top_once:
         import streamlit.components.v1 as _components
         _components.html('''<script>
-            function scrollAll(){
-                var main = window.parent.document.querySelector("section.main");
-                if (main) main.scrollTop = 0;
-                var stApp = window.parent.document.querySelector(".stApp");
-                if (stApp) stApp.scrollTop = 0;
-                window.parent.document.documentElement.scrollTop = 0;
-                window.parent.scrollTo(0, 0);
-            }
-            setTimeout(scrollAll, 10);
-            setTimeout(scrollAll, 180);
-            setTimeout(scrollAll, 400);
+            (function () {
+                function scrollAll() {
+                    var d = window.parent.document;
+                    var targets = [
+                        window.parent,
+                        d.scrollingElement,
+                        d.documentElement,
+                        d.body,
+                        d.querySelector("section.main"),
+                        d.querySelector(".main"),
+                        d.querySelector("[data-testid='stAppViewContainer']"),
+                        d.querySelector("[data-testid='stMain']")
+                    ];
+                    for (var i = 0; i < targets.length; i++) {
+                        var t = targets[i];
+                        if (!t) continue;
+                        try {
+                            if (typeof t.scrollTo === "function") t.scrollTo(0, 0);
+                        } catch (e) {}
+                        try {
+                            t.scrollTop = 0;
+                        } catch (e) {}
+                    }
+                }
+
+                [0, 60, 180, 420, 900, 1600].forEach(function (ms) {
+                    setTimeout(scrollAll, ms);
+                });
+            })();
         </script>''', height=0)
         st.session_state.scroll_to_top_once = False
 
@@ -1361,12 +1388,19 @@ if st.session_state.study_data:
         docs_bundle,
     )
 
-    # Tabs
-    tab_rec, tab_rank, tab_baseline, tab_profiles, tab_memo = st.tabs([
-        "✅ Recommendation", "📊 Rankings", "🔍 Baseline", "📈 Profiles", "📝 Memo"])
+    # Results navigation: render one section at a time to avoid stacked-content behavior.
+    result_sections = ["✅ Recommendation", "📊 Rankings", "🔍 Baseline", "📈 Profiles", "📝 Memo"]
+    if "results_section" not in st.session_state or st.session_state.results_section not in result_sections:
+        st.session_state.results_section = result_sections[0]
+    selected_results_section = st.segmented_control(
+        "Results sections",
+        options=result_sections,
+        key="results_section",
+        label_visibility="collapsed",
+    )
 
     # ═══ RECOMMENDATION ═══════════════════════════════════════════════════════
-    with tab_rec:
+    if selected_results_section == "✅ Recommendation":
         st.markdown('<div class="sec-head">Recommended Solution</div>', unsafe_allow_html=True)
 
         selected_name = st.selectbox(
@@ -1628,7 +1662,7 @@ Current: **{stress_val:.0f}** ({sev_txt})
             st.plotly_chart(fig_comp, use_container_width=True)
 
     # ═══ RANKINGS ═════════════════════════════════════════════════════════════
-    with tab_rank:
+    if selected_results_section == "📊 Rankings":
         st.markdown('<div class="sec-head">Portfolio Rankings</div>', unsafe_allow_html=True)
         st.caption("All solutions ranked by weighted score. Score range: 0 (worst) to 10 (best).")
 
@@ -1698,7 +1732,7 @@ Current: **{stress_val:.0f}** ({sev_txt})
         st.dataframe(rank_df[display_cols] if display_cols else rank_df, use_container_width=True, height=300)
 
     # ═══ BASELINE ═════════════════════════════════════════════════════════════
-    with tab_baseline:
+    if selected_results_section == "🔍 Baseline":
         st.markdown('<div class="sec-head">Baseline Grid Assessment</div>', unsafe_allow_html=True)
         st.caption("24-hour simulation under projected future load without any intervention.")
 
@@ -1754,7 +1788,7 @@ Current: **{stress_val:.0f}** ({sev_txt})
             st.plotly_chart(grid_fig, use_container_width=True)
 
     # ═══ PROFILES ═════════════════════════════════════════════════════════════
-    with tab_profiles:
+    if selected_results_section == "📈 Profiles":
         st.markdown('<div class="sec-head">24-Hour Load Profiles</div>', unsafe_allow_html=True)
         st.caption("Synthetic demand and generation curves shaped by scenario selections, scaled by planning horizon.")
 
@@ -1843,7 +1877,7 @@ Current: **{stress_val:.0f}** ({sev_txt})
             )
 
     # ═══ MEMO ═════════════════════════════════════════════════════════════════
-    with tab_memo:
+    if selected_results_section == "📝 Memo":
         st.markdown('<div class="sec-head">Planning Decision Memo</div>', unsafe_allow_html=True)
         memo = selected_memo or data.get("memo", "")
         if memo:
