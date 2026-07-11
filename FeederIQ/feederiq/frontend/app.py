@@ -773,7 +773,7 @@ def render_grid_map():
             line_lons.extend([lon1, lon2, None])
     fig.add_trace(go.Scattermapbox(
         lat=line_lats, lon=line_lons,
-        mode='lines', line=dict(color='#888888', width=1.5),
+        mode='lines', line=dict(color='#999999', width=1.2),
         hoverinfo='skip', showlegend=False
     ))
 
@@ -787,14 +787,36 @@ def render_grid_map():
     key_buses_set = ev_buses | solar_buses | {dc_bus}
     other_buses = set(geo.keys()) - key_buses_set
 
-    # Regular buses
+    # Regular buses - sized by load
     if other_buses:
+        try:
+            import opendssdirect as dss_lib
+            master_path = Path(__file__).resolve().parent.parent.parent / "ai_synthetic_data" / "master_lite.dss"
+            dss_lib.Basic.ClearAll()
+            dss_lib.Text.Command(f"Compile [{master_path.as_posix()}]")
+            dss_lib.Solution.Solve()
+            bus_kw_ieee = {}
+            for ln in dss_lib.Loads.AllNames():
+                dss_lib.Loads.Name(ln)
+                bus = dss_lib.CktElement.BusNames()[0].split('.')[0].lower()
+                bus_kw_ieee[bus] = bus_kw_ieee.get(bus, 0) + dss_lib.Loads.kW()
+            max_kw_ieee = max(bus_kw_ieee.values()) if bus_kw_ieee else 1
+        except Exception:
+            bus_kw_ieee = {}
+            max_kw_ieee = 1
+
+        bus_sizes_ieee = []
+        for b in other_buses:
+            kw = bus_kw_ieee.get(b.lower(), 0)
+            bus_sizes_ieee.append(max(6, min(14, 6 + 8 * (kw / max_kw_ieee))) if max_kw_ieee > 0 else 6)
+
+        other_list = list(other_buses)
         fig.add_trace(go.Scattermapbox(
-            lat=[geo[b][0] for b in other_buses],
-            lon=[geo[b][1] for b in other_buses],
+            lat=[geo[b][0] for b in other_list],
+            lon=[geo[b][1] for b in other_list],
             mode='markers',
-            marker=dict(size=5, color='#888888'),
-            text=[f"Bus {b}" for b in other_buses],
+            marker=dict(size=bus_sizes_ieee, color='#1565C0', opacity=0.7),
+            text=[f"Bus {b}<br>{bus_kw_ieee.get(b.lower(), 0):.0f} kW" for b in other_list],
             hoverinfo='text', showlegend=False,
         ))
 
@@ -822,7 +844,7 @@ def render_grid_map():
             center=dict(lat=ANCHOR_LAT, lon=ANCHOR_LON),
             zoom=14,
         ),
-        height=400, margin=dict(t=30, b=5, l=5, r=5),
+        height=550, margin=dict(t=30, b=5, l=5, r=5),
         paper_bgcolor='white',
         legend=dict(orientation='h', y=1.02, x=0.5, xanchor='center',
                     font=dict(size=11, family='Arial', color=C_DARK)),
@@ -862,18 +884,40 @@ def render_gis_map():
             line_lons.extend([geo[b1][1], geo[b2][1], None])
     fig.add_trace(go.Scattermapbox(
         lat=line_lats, lon=line_lons,
-        mode='lines', line=dict(color='#888888', width=1.5),
+        mode='lines', line=dict(color='#999999', width=1.2),
         hoverinfo='skip', showlegend=False
     ))
 
-    # Bus nodes
+    # Bus nodes - sized by load (compile feeder to get load data)
     bus_list = list(geo.keys())
+    try:
+        import opendssdirect as dss_lib
+        from pathlib import Path as P2
+        epri_master = P2(__file__).resolve().parent.parent.parent / "ai_synthetic_data" / "epri_ckt5" / "Master_ckt5.dss"
+        dss_lib.Basic.ClearAll()
+        dss_lib.Text.Command(f"Compile [{epri_master.as_posix()}]")
+        dss_lib.Solution.Solve()
+        bus_kw = {}
+        for ln in dss_lib.Loads.AllNames():
+            dss_lib.Loads.Name(ln)
+            bus = dss_lib.CktElement.BusNames()[0].split('.')[0].lower()
+            bus_kw[bus] = bus_kw.get(bus, 0) + dss_lib.Loads.kW()
+        max_kw = max(bus_kw.values()) if bus_kw else 1
+    except Exception:
+        bus_kw = {}
+        max_kw = 1
+
+    bus_sizes = []
+    for b in bus_list:
+        kw = bus_kw.get(b.lower(), 0)
+        bus_sizes.append(max(6, min(18, 6 + 12 * (kw / max_kw))) if max_kw > 0 else 6)
+
     fig.add_trace(go.Scattermapbox(
         lat=[geo[b][0] for b in bus_list],
         lon=[geo[b][1] for b in bus_list],
         mode='markers',
-        marker=dict(size=3, color='#888888'),
-        text=[f"Bus {b}" for b in bus_list],
+        marker=dict(size=bus_sizes, color='#1565C0', opacity=0.7),
+        text=[f"Bus {b}<br>{bus_kw.get(b.lower(), 0):.1f} kW" if bus_kw.get(b.lower(), 0) > 0 else f"Bus {b}<br>Junction node (through-flow)" for b in bus_list],
         hoverinfo='text', showlegend=False,
     ))
 
@@ -885,21 +929,21 @@ def render_gis_map():
     fig.add_trace(go.Scattermapbox(
         lat=[geo[dc_bus_epri][0]], lon=[geo[dc_bus_epri][1]],
         mode='markers', marker=dict(size=18, color='#8B0000'),
-        hovertext=["<b>Data Center</b><br>1.75 MW load"],
+        hovertext=[f"<b>Data Center</b><br>Bus {dc_bus_epri}<br>Load: 1.75 MW<br>Power Factor: 0.97"],
         hoverinfo='text', name='<b>Data Center</b>',
     ))
     fig.add_trace(go.Scattermapbox(
         lat=[geo[b][0] for b in ev_buses_epri],
         lon=[geo[b][1] for b in ev_buses_epri],
         mode='markers', marker=dict(size=14, color=C1),
-        hovertext=[f"<b>EV Charging</b><br>Bus {b}" for b in ev_buses_epri],
+        hovertext=[f"<b>EV Charging</b><br>Bus {b}<br>Load: {0.3/6*1000:.0f} kW per station<br>Total EV: 300 kW" for b in ev_buses_epri],
         hoverinfo='text', name='<b>EV Charging</b>',
     ))
     fig.add_trace(go.Scattermapbox(
         lat=[geo[b][0] for b in solar_buses_epri],
         lon=[geo[b][1] for b in solar_buses_epri],
         mode='markers', marker=dict(size=14, color=C_GREEN),
-        hovertext=[f"<b>Solar PV</b><br>Bus {b}" for b in solar_buses_epri],
+        hovertext=[f"<b>Solar PV</b><br>Bus {b}<br>Generation: {2.0/6*1000:.0f} kW per site<br>Total Solar: 2.0 MW" for b in solar_buses_epri],
         hoverinfo='text', name='<b>Solar PV</b>',
     ))
 
@@ -941,9 +985,9 @@ def render_gis_map():
         mapbox=dict(
             style='open-street-map',
             center=dict(lat=center_lat, lon=center_lon),
-            zoom=14,
+            zoom=13.5,
         ),
-        height=450, margin=dict(t=30, b=5, l=5, r=5),
+        height=650, margin=dict(t=30, b=5, l=5, r=5),
         paper_bgcolor='white',
         legend=dict(orientation='h', y=1.02, x=0.5, xanchor='center',
                     font=dict(size=11, family='Arial', color=C_DARK)),
@@ -1023,7 +1067,7 @@ def render_before_after_map(improvement_pct):
                 x1, y1 = primary[b2]
                 fig.add_trace(go.Scatter(
                     x=[x0, x1, None], y=[y0, y1, None],
-                    mode='lines', line=dict(color='#DDDDDD', width=0.8),
+                    mode='lines', line=dict(color='#999999', width=1.2),
                     hoverinfo='skip', showlegend=False
                 ), row=1, col=col)
 
@@ -1033,23 +1077,21 @@ def render_before_after_map(improvement_pct):
             xs.append(x)
             ys.append(y)
             if is_after:
-                # After: color based on whether stress is resolved
                 if bus in stressed_buses:
                     dist = stress_distance.get(bus, 0)
                     if improvement_pct >= 80:
-                        colors.append(C_GREEN)
+                        colors.append("#1565C0")
                         sizes.append(7)
                     elif improvement_pct >= 40 or dist >= 2:
-                        colors.append("#E88D14")  # partially resolved
-                        sizes.append(8)
+                        colors.append("#E88D14")
+                        sizes.append(9)
                     else:
-                        colors.append(C_GREEN if dist >= 2 else "#E88D14")
-                        sizes.append(8)
+                        colors.append("#1565C0" if dist >= 2 else "#E88D14")
+                        sizes.append(9)
                 else:
-                    colors.append(C_GREEN)
+                    colors.append("#1565C0")
                     sizes.append(6)
             else:
-                # Before: color by stress intensity (distance from source)
                 if bus == dc_bus:
                     colors.append("#8B0000")
                     sizes.append(14)
@@ -1062,23 +1104,22 @@ def render_before_after_map(improvement_pct):
                         colors.append(C_RED)
                         sizes.append(9)
                     elif dist == 2:
-                        colors.append(C1)
-                        sizes.append(7)
+                        colors.append("#E88D14")
+                        sizes.append(8)
                     else:
-                        colors.append(C2)
-                        sizes.append(6)
+                        colors.append("#E88D14")
+                        sizes.append(7)
                 else:
-                    colors.append(C_GREEN)
+                    colors.append("#1565C0")
                     sizes.append(6)
 
         fig.add_trace(go.Scatter(x=xs, y=ys, mode='markers',
-                                  marker=dict(size=sizes, color=colors, line=dict(width=0.5, color='white')),
+                                  marker=dict(size=sizes, color=colors, line=dict(width=0.3, color='white')),
                                   showlegend=False, hoverinfo='skip'), row=1, col=col)
 
-    fig.update_layout(height=280, margin=dict(t=35, b=5, l=5, r=5),
+    fig.update_layout(height=550, margin=dict(t=35, b=5, l=5, r=5),
                       plot_bgcolor='#F8F8F8', paper_bgcolor='white',
                       font=dict(family="Arial", size=10))
-    # Make subplot titles smaller and bold (already using <b> tags above)
     fig.update_annotations(font_size=11, font_family="Arial")
     fig.update_xaxes(visible=False)
     fig.update_yaxes(visible=False)
@@ -1086,7 +1127,7 @@ def render_before_after_map(improvement_pct):
 
 
 def render_before_after_map_epri(improvement_pct):
-    """Render before/after stress map for EPRI ckt5 feeder."""
+    """Render before/after stress maps for EPRI ckt5 on real basemap (same style as landing page)."""
     from pathlib import Path
     import json
     from collections import deque
@@ -1094,7 +1135,7 @@ def render_before_after_map_epri(improvement_pct):
     coords_path = data_dir / "epri_ckt5_coords.json"
     edges_path = data_dir / "epri_ckt5_edges.json"
     if not coords_path.exists() or not edges_path.exists():
-        return None
+        return None, None
 
     with open(coords_path) as f:
         geo = json.load(f)
@@ -1134,69 +1175,73 @@ def render_before_after_map_epri(improvement_pct):
                 stressed_buses.add(neighbor)
                 queue.append((neighbor, dist + 1))
 
-    from plotly.subplots import make_subplots
-    fig = make_subplots(rows=1, cols=2, subplot_titles=["<b>Before (Baseline)</b>", "<b>After (Intervention)</b>"],
-                        horizontal_spacing=0.05)
+    lats = [v[0] for v in geo.values()]
+    lons = [v[1] for v in geo.values()]
+    center_lat = sum(lats) / len(lats)
+    center_lon = sum(lons) / len(lons)
 
-    # Draw topology lines (single trace per panel for performance)
-    for col in [1, 2]:
-        lx, ly = [], []
-        for b1, b2 in edges:
-            if b1 in geo and b2 in geo:
-                lx.extend([geo[b1][1], geo[b2][1], None])
-                ly.extend([geo[b1][0], geo[b2][0], None])
-        fig.add_trace(go.Scatter(x=lx, y=ly, mode='lines', line=dict(color='#DDDDDD', width=0.5),
-                                  hoverinfo='skip', showlegend=False), row=1, col=col)
+    # Build lines trace (shared)
+    line_lats, line_lons = [], []
+    for b1, b2 in edges:
+        if b1 in geo and b2 in geo:
+            line_lats.extend([geo[b1][0], geo[b2][0], None])
+            line_lons.extend([geo[b1][1], geo[b2][1], None])
 
-    for col, is_after in [(1, False), (2, True)]:
-        xs, ys, colors, sizes = [], [], [], []
+    figs = []
+    for is_after in [False, True]:
+        fig = go.Figure()
+        # Lines - gray, thin
+        fig.add_trace(go.Scattermapbox(
+            lat=line_lats, lon=line_lons,
+            mode='lines', line=dict(color='#999999', width=1.2),
+            hoverinfo='skip', showlegend=False
+        ))
+        # Buses colored by stress - blue for resolved (not green), yellow for partial
+        bus_lats, bus_lons, colors, sizes = [], [], [], []
         for bus in geo:
-            xs.append(geo[bus][1])
-            ys.append(geo[bus][0])
+            bus_lats.append(geo[bus][0])
+            bus_lons.append(geo[bus][1])
             if is_after:
                 if bus in stressed_buses:
                     dist = stress_distance.get(bus, 0)
                     if improvement_pct >= 80:
-                        colors.append(C_GREEN); sizes.append(4)
+                        colors.append("#1565C0"); sizes.append(6)
                     elif improvement_pct >= 40 or dist >= 2:
-                        colors.append("#E88D14"); sizes.append(5)
+                        colors.append("#E88D14"); sizes.append(9)
                     else:
-                        colors.append(C_GREEN if dist >= 2 else "#E88D14"); sizes.append(5)
+                        colors.append("#1565C0" if dist >= 2 else "#E88D14"); sizes.append(9)
                 else:
-                    colors.append(C_GREEN); sizes.append(3)
+                    colors.append("#1565C0"); sizes.append(5)
             else:
                 if bus == dc_bus_epri:
-                    colors.append("#8B0000"); sizes.append(10)
+                    colors.append("#8B0000"); sizes.append(14)
                 elif bus in overload_sources:
-                    colors.append(C_RED); sizes.append(7)
+                    colors.append(C_RED); sizes.append(11)
                 elif bus in stressed_buses:
                     dist = stress_distance.get(bus, 3)
                     if dist == 1:
-                        colors.append(C_RED); sizes.append(6)
+                        colors.append(C_RED); sizes.append(9)
                     elif dist == 2:
-                        colors.append(C1); sizes.append(5)
+                        colors.append("#E88D14"); sizes.append(8)
                     else:
-                        colors.append(C2); sizes.append(4)
+                        colors.append("#E88D14"); sizes.append(7)
                 else:
-                    colors.append(C_GREEN); sizes.append(3)
+                    colors.append("#1565C0"); sizes.append(5)
 
-        fig.add_trace(go.Scatter(x=xs, y=ys, mode='markers',
-                                  marker=dict(size=sizes, color=colors, line=dict(width=0.3, color='white')),
-                                  showlegend=False, hoverinfo='skip'), row=1, col=col)
+        fig.add_trace(go.Scattermapbox(
+            lat=bus_lats, lon=bus_lons, mode='markers',
+            marker=dict(size=sizes, color=colors),
+            showlegend=False, hoverinfo='skip'
+        ))
+        fig.update_layout(
+            mapbox=dict(style='open-street-map', center=dict(lat=center_lat, lon=center_lon), zoom=13.5),
+            height=650, margin=dict(t=25, b=5, l=5, r=5), paper_bgcolor='white',
+            title=dict(text="<b>After (Intervention)</b>" if is_after else "<b>Before (Baseline)</b>",
+                       font=dict(size=11, family="Arial", color=C_DARK), x=0.5),
+        )
+        figs.append(fig)
 
-    # Zoom to feeder extent
-    all_xs = [geo[b][1] for b in geo]
-    all_ys = [geo[b][0] for b in geo]
-    x_pad = (max(all_xs) - min(all_xs)) * 0.05
-    y_pad = (max(all_ys) - min(all_ys)) * 0.05
-
-    fig.update_layout(height=380, margin=dict(t=35, b=5, l=5, r=5),
-                      plot_bgcolor='#F8F8F8', paper_bgcolor='white',
-                      font=dict(family="Arial", size=10))
-    fig.update_annotations(font_size=11, font_family="Arial")
-    fig.update_xaxes(visible=False, range=[min(all_xs) - x_pad, max(all_xs) + x_pad])
-    fig.update_yaxes(visible=False, range=[min(all_ys) - y_pad, max(all_ys) + y_pad])
-    return fig
+    return figs[0], figs[1]
 
 
 # ─── Session State ────────────────────────────────────────────────────────────
@@ -1227,10 +1272,10 @@ with st.sidebar:
 
     st.markdown(f'<div class="sidebar-section"><b>📂 Data Source</b></div>', unsafe_allow_html=True)
     use_gis_map = st.checkbox("EPRI real feeder (981 buses, Roswell GA)", value=False, key="gis_map",
-                              help="Switch to a REAL US distribution feeder from the EPRI public test circuit dataset (ckt5). **981 buses, 1,050 line segments, ~2.5 x 2.9 miles.** Real feeder topology placed on a suburban Atlanta map (illustrative location). Includes EV, Solar, and Data Center scenario assets. This is a completely different, larger grid - not the IEEE 123-bus.",
+                              help="**This is a real dataset with real distribution nodes from EPRI public test circuits.** 981 buses, 1,050 line segments, ~2.5 x 2.9 miles. Total base load: 6.8 MW across 1,379 loads. Assets placed: 1 Data Center (1.75 MW, Bus 8163), 6 EV Charging stations (Buses 8164, 829, 834, 44582, 8160, 6584), 6 Solar PV installations (Buses 8113, 8124, 14880, 63707, 63657, 6584). Primary voltage: 12.47 kV. Supply: single substation source. Real feeder topology placed on suburban Atlanta map (illustrative location).",
                               disabled=sidebar_locked)
     use_real_data = st.checkbox("DOE openEDI real load profiles (IEEE 123-bus)", value=True, key="real_data",
-                                help="91 real measured load profiles from the US DOE Open Energy Data Initiative (oedisi-ieee123 dataset). Each profile covers one bus on the IEEE 123-bus feeder with 35,040 data points at 15-minute intervals across a full year (365 days). The system automatically identifies the peak-stress day from the entire year and runs simulation on that worst-case day. Data includes residential, commercial, and mixed-use load patterns. **This is actual metered utility data, not synthetic curves.**",
+                                help="IEEE 123-bus test feeder with 91 real measured load profiles from US DOE openEDI. Total base load: ~3.5 MW across 85 loads. Assets placed: 1 Data Center (1-3 MW, Bus 67), 5 EV Charging stations (Buses 60, 83, 90, 92, 114), 5 Solar PV installations (Buses 66, 80, 92, 104, 110). Primary voltage: 4.16 kV. Supply: single substation source. Each load profile has 35,040 data points at 15-minute intervals across 365 days. Peak-stress day auto-selected. **This is actual metered utility data, not synthetic curves.**",
                                 disabled=use_gis_map)
     if use_gis_map and use_real_data:
         use_real_data = False
@@ -1894,13 +1939,23 @@ Current: **{stress_val:.0f}** ({sev_txt})
 
         # Before/After Grid Map
         st.markdown(f'<div style="font:700 0.82rem Arial,sans-serif;color:{C_DARK};margin:14px 0 5px;">Grid Stress Visualization</div>', unsafe_allow_html=True)
-        st.caption("Red nodes indicate stressed equipment. Green indicates resolved. Orange indicates partially resolved.")
+        st.markdown(f'''<div style="font:400 0.75rem Arial;color:{C_GREY};margin-bottom:6px;">
+            <span style="color:#C92A2A;font-weight:bold;">Red</span> nodes indicate stressed equipment.
+            <span style="color:#1565C0;font-weight:bold;">Blue</span> indicates resolved.
+            <span style="color:#E88D14;font-weight:bold;">Orange</span> indicates partially resolved.
+        </div>''', unsafe_allow_html=True)
         if use_gis_map:
-            ba_map = render_before_after_map_epri(impr)
+            ba_before, ba_after = render_before_after_map_epri(impr)
+            if ba_before and ba_after:
+                col_ba1, col_ba2 = st.columns(2)
+                with col_ba1:
+                    st.plotly_chart(ba_before, use_container_width=True)
+                with col_ba2:
+                    st.plotly_chart(ba_after, use_container_width=True)
         else:
             ba_map = render_before_after_map(impr)
-        if ba_map:
-            st.plotly_chart(ba_map, use_container_width=True)
+            if ba_map:
+                st.plotly_chart(ba_map, use_container_width=True)
 
         # Hourly comparison with non-uniform reduction (stronger during peak)
         base_results = data.get("base_results", [])
@@ -2138,9 +2193,8 @@ Current: **{stress_val:.0f}** ({sev_txt})
             # LLM-generated portfolio linkage
             try:
                 from feederiq.backend.llm_client import invoke_llm
-                linkage_prompt = f"""You are a distribution grid planning analyst. Write a 4-5 sentence portfolio linkage analysis.
-
-Profile context:
+                linkage_system = "You are a distribution grid planning analyst. Write exactly 4-5 sentences of portfolio linkage analysis. Be specific about timing, synergies, and outcomes. Plain text only, no markdown."
+                linkage_user = f"""Profile context:
 - Feeder peaks at {peak_feeder:.2f}x base load
 - EV peak: {peak_ev:.2f} MW at {ev_peak_hr}
 - Solar peak: {peak_solar:.2f} MW at {solar_peak_hr}
@@ -2151,20 +2205,18 @@ Profile context:
 Selected portfolio: {selected_solution.get('portfolio_name', 'N/A')}
 Active interventions: {active_solution_labels}
 Grid stress reduction: {selected_solution.get('technical_improvement_pct', 0):.1f}%
-Grid relief score: {selected_solution.get('grid_relief_score', selected_solution.get('technical_score', 0)):.1f}/10
 
-Explain specifically:
-1. WHY this portfolio addresses the stress pattern (link each intervention to the profile timing)
-2. HOW the interventions work together (synergies)
-3. WHAT hours/conditions benefit most
-4. The expected operational outcome
-
-Write in third person, factual, no hedging. Plain text only, no markdown or bullet points."""
-                linkage_text = invoke_llm(linkage_prompt, max_tokens=300)
+Explain: WHY this portfolio addresses the stress pattern, HOW interventions work together, WHAT hours benefit most, and the expected operational outcome."""
+                linkage_text = invoke_llm(linkage_system, linkage_user, max_tokens=500)
+                if not linkage_text:
+                    raise ValueError("Empty LLM response")
             except Exception:
                 linkage_text = (
                     f"{selected_solution.get('portfolio_name', 'N/A')} applies {active_solution_labels}, "
-                    f"focused on reducing the {peak_net_hr} stress window and improving hourly thermal/voltage margins."
+                    f"targeting the {peak_net_hr} stress window when EV charging ({peak_ev:.2f} MW) coincides with data center base load ({peak_dc:.2f} MW) "
+                    f"and solar output drops to zero. The interventions work together by shifting controllable EV demand to off-peak hours while staged load connection "
+                    f"defers the data center's full impact. This reduces thermal loading on constrained lines during the critical 17:00-21:00 window, "
+                    f"achieving {selected_solution.get('technical_improvement_pct', 0):.1f}% grid stress reduction with fastest deployment path."
                 )
 
             st.markdown(f'''<div style="background:#FFF8F0;border-radius:8px;padding:14px 18px;margin:10px 0;border:1px solid #F5E6D3;border-left:3px solid {C1};">
@@ -2207,9 +2259,8 @@ Write in third person, factual, no hedging. Plain text only, no markdown or bull
             # LLM-generated detailed recommendation on the proposed solution
             try:
                 from feederiq.backend.llm_client import invoke_llm
-                reco_prompt = f"""You are a senior PwC utility consulting partner writing a recommendation for a planning decision memo.
-
-Context:
+                reco_system = "You are a senior PwC utility consulting partner. Write an authoritative 6-8 sentence executive recommendation. Boardroom tone, third person, plain text only."
+                reco_user = f"""Context:
 - Selected solution: {selected_solution.get('portfolio_name', 'N/A')}
 - Final score: {selected_solution.get('final_score', 0):.2f}/10
 - Grid relief: {selected_solution.get('technical_improvement_pct', 0):.1f}% stress reduction
@@ -2218,22 +2269,23 @@ Context:
 - Planning horizon: {data.get('scenario', {}).get('horizon_label', '12m')}
 - Feeder: {'EPRI ckt5 (981 buses)' if use_gis_map else 'IEEE 123-bus'}
 
-Write a 6-8 sentence executive recommendation paragraph that:
-1. States the recommended course of action clearly
-2. Quantifies the expected benefit (stress reduction, risk mitigation)
-3. Identifies implementation priority and sequencing
-4. Notes dependencies and risk mitigations
-5. Recommends governance checkpoints
-6. Ends with a clear call to action
-
-Write in third person, authoritative boardroom tone. Plain text, no markdown."""
-                reco_text = invoke_llm(reco_prompt, max_tokens=400)
+Write a recommendation that: states the recommended action, quantifies expected benefit, identifies implementation sequencing, notes dependencies and risk mitigations, recommends governance checkpoints, and ends with a clear call to action."""
+                reco_text = invoke_llm(reco_system, reco_user, max_tokens=600)
+                if not reco_text:
+                    raise ValueError("Empty")
                 st.markdown(f'''<div style="background:#F0FFF4;border-radius:8px;padding:14px 18px;margin:14px 0;border:1px solid #C8E4DB;border-left:3px solid {C_GREEN};">
                     <div style="font:700 0.82rem Arial;color:{C_GREEN};margin-bottom:8px;">Recommendation on Proposed Solution</div>
                     <div style="font:400 0.82rem Arial;color:{C_DARK};line-height:1.8;">{reco_text}</div>
                 </div>''', unsafe_allow_html=True)
             except Exception:
-                pass
+                # Fallback static recommendation
+                active_labels = ', '.join([a['label'] for a in _active_interventions(selected_solution)]) or "selected interventions"
+                st.markdown(f'''<div style="background:#F0FFF4;border-radius:8px;padding:14px 18px;margin:14px 0;border:1px solid #C8E4DB;border-left:3px solid {C_GREEN};">
+                    <div style="font:700 0.82rem Arial;color:{C_GREEN};margin-bottom:8px;">Recommendation on Proposed Solution</div>
+                    <div style="font:400 0.82rem Arial;color:{C_DARK};line-height:1.8;">
+                    The planning team recommends proceeding with {selected_solution.get('portfolio_name', 'the selected portfolio')} as the primary intervention strategy, delivering {selected_solution.get('technical_improvement_pct', 0):.1f}% grid stress reduction from a baseline score of {data.get('base_summary', {}).get('grid_stress_score', 0):.0f}. This portfolio combines {active_labels} to address thermal overloads and voltage violations during the critical evening peak window. Implementation should follow a phased approach: initiate program design and stakeholder engagement within 30 days, secure regulatory approvals and customer commitments by day 90, and achieve operational deployment within the {data.get('scenario', {}).get('horizon_label', '12-month')} planning horizon. Key dependencies include metering infrastructure readiness, customer enrollment targets, and interconnection agreement execution. A quarterly governance review is recommended to track KPI performance against the baseline and adjust intervention levels based on actual load growth. The steering committee should approve the implementation business case within 2 weeks to maintain schedule alignment.
+                    </div>
+                </div>''', unsafe_allow_html=True)
 
             st.markdown(
                 _implementation_pack_html(
@@ -2378,6 +2430,8 @@ Write in third person, authoritative boardroom tone. Plain text, no markdown."""
                         self.ln(2)
 
                     def body_text(self, text):
+                        if self.get_y() > 250:
+                            self.add_page()
                         self.set_font("Helvetica", "", 9.5)
                         self.set_text_color(60, 60, 60)
                         self.multi_cell(0, 5.5, self._safe_text(text))
@@ -2410,6 +2464,11 @@ Write in third person, authoritative boardroom tone. Plain text, no markdown."""
                             max_lines = max(max_lines, len(lines))
 
                         row_h = max(6.5, max_lines * line_h + 2)
+
+                        # Check if row fits on current page, if not add page
+                        if self.get_y() + row_h > 270:
+                            self.add_page()
+
                         y0 = self.get_y()
                         self.set_x(self.l_margin)
 
@@ -2449,7 +2508,7 @@ Write in third person, authoritative boardroom tone. Plain text, no markdown."""
 
                 pdf = MemoDoc()
                 pdf.alias_nb_pages()
-                pdf.set_auto_page_break(auto=True, margin=22)
+                pdf.set_auto_page_break(auto=False)
 
                 # ── PAGE 1: Cover + Executive Summary ──
                 pdf.add_page()
@@ -2630,12 +2689,12 @@ Write in third person, authoritative boardroom tone. Plain text, no markdown."""
                 pdf.ln(1)
 
                 pdf.subsection_title("4.3 Alternative Solutions Considered")
-                widths_alt = [108, 28, 28, 26]
+                widths_alt = [130, 22, 22, 16]
                 pdf.table_header(["Portfolio", "Score", "Relief %", "Rank"], widths_alt)
                 for idx, r in enumerate(ordered_alternatives[:5]):
                     name = r.get('portfolio_name', 'N/A')
                     pdf.table_row([
-                        _clip(name, 44),
+                        name,
                         f"{r.get('final_score', 0):.2f}",
                         f"{r.get('technical_improvement_pct', 0):.1f}%",
                         f"#{ranking_by_name.get(name, idx + 1)}"
@@ -2695,11 +2754,34 @@ Write in third person, authoritative boardroom tone. Plain text, no markdown."""
                     step_name = cp["step"].replace("_", " ").title().replace("Nwa", "NWA")
                     requires_approval = cp.get("requires_approval", False)
                     status = "PASS" if not requires_approval else "FLAG"
-                    msg = cp.get("message", "")
+                    msg = _clip(cp.get("message", ""), 80)
                     pdf.table_row([status, step_name, msg], widths_log, aligns=["C", "L", "L"])
 
                 pdf.ln(4)
+                if pdf.get_y() > 220:
+                    pdf.add_page()
                 pdf.section_title("6. Recommendations & Next Steps")
+
+                # LLM or fallback recommendation paragraph
+                active_labels_pdf = ', '.join([a['label'] for a in _active_interventions(top_rec)]) or "selected interventions"
+                reco_para = (
+                    f"The planning team recommends proceeding with '{top_rec.get('portfolio_name', 'N/A')}' as the primary intervention strategy, "
+                    f"delivering {top_rec.get('technical_improvement_pct', 0):.1f}% grid stress reduction from a baseline score of {bs_data.get('grid_stress_score', 0):.0f}. "
+                    f"This portfolio combines {active_labels_pdf} to address thermal overloads and voltage violations during the critical evening peak window. "
+                    f"Implementation should follow a phased approach: initiate program design within 30 days, secure approvals by day 90, "
+                    f"and achieve operational deployment within the planning horizon. "
+                    f"Key dependencies include metering infrastructure, customer enrollment, and interconnection agreements. "
+                    f"A quarterly governance review is recommended to track KPI performance and adjust intervention levels."
+                )
+                pdf.set_font("Helvetica", "", 9)
+                pdf.set_text_color(*PWC_DARK)
+                if pdf.get_y() > 230:
+                    pdf.add_page()
+                pdf.multi_cell(0, 4.5, pdf._safe_text(reco_para))
+                pdf.ln(3)
+
+                if pdf.get_y() > 240:
+                    pdf.add_page()
                 widths_ns = [18, 122, 50]
                 pdf.table_header(["#", "Action", "Timing"], widths_ns)
                 next_steps = [
