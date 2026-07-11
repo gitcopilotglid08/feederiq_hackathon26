@@ -2,6 +2,7 @@ import re
 from pathlib import Path
 from ..simulation.portfolios import generate_portfolios, score_portfolio, summarize_results
 from ..simulation.engine import run_24hr_simulation
+from ..simulation.engine_epri import run_epri_24hr_simulation
 from ..simulation.portfolios import apply_portfolio_to_profiles, line_capacity_multiplier, transformer_capacity_multiplier
 from ..config import INTERVENTION_KEYS
 
@@ -39,7 +40,7 @@ class NWAAgent:
         self.exclude = self.config.get("exclude_interventions", ["TransformerUpgrade"])
         self.max_measures = self.config.get("max_active_measures", 3)
 
-    def run(self, profiles, base_summary: dict, max_portfolios: int = 30, required_interventions: list = None, min_active_measures: int = 1) -> list:
+    def run(self, profiles, base_summary: dict, max_portfolios: int = 30, required_interventions: list = None, min_active_measures: int = 1, use_epri: bool = False) -> list:
         # Generate portfolios excluding interventions specified in instructions
         all_portfolios = generate_portfolios(
             max_active_measures=self.max_measures,
@@ -58,7 +59,7 @@ class NWAAgent:
             modified = apply_portfolio_to_profiles(profiles, portfolio)
             cap_line = line_capacity_multiplier(0)
             cap_xf = transformer_capacity_multiplier(0)
-            results = run_24hr_simulation(modified, portfolio, cap_mult_line=cap_line, cap_mult_xf=cap_xf)
+            results = (run_epri_24hr_simulation if use_epri else run_24hr_simulation)(modified, portfolio, cap_mult_line=cap_line, cap_mult_xf=cap_xf)
             alt_summary = summarize_results(results)
             improvement = max(0.0, (base_stress - alt_summary["grid_stress_score"]) / base_stress * 100.0)
             score_row = score_portfolio(portfolio, improvement)

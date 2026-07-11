@@ -44,7 +44,8 @@ def create_study(req: ScenarioRequest):
         result = run_study(scenario, max_portfolios=req.max_portfolios or 60,
                            thread_id=study_id,
                            required_interventions=req.required_interventions,
-                           min_active_measures=req.min_active_measures)
+                           min_active_measures=req.min_active_measures,
+                           use_epri=req.use_epri)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Study failed: {str(e)}\n{traceback.format_exc()}")
 

@@ -37,6 +37,7 @@ class StudyState(TypedDict):
     max_portfolios: int
     min_active_measures: int
     required_interventions: list
+    use_epri: bool
     # Intermediate
     profiles_records: list  # serializable list of dicts
     assumptions: dict
@@ -78,7 +79,7 @@ def scenario_node(state: StudyState) -> dict:
 
 
 def simulation_node(state: StudyState) -> dict:
-    agent = SimulationAgent()
+    agent = SimulationAgent(use_epri=state.get("use_epri", False))
     profiles = _records_to_df(state["profiles_records"])
     base_results = agent.run_baseline(profiles)
     return {"base_results": base_results}
@@ -112,7 +113,7 @@ def nwa_node(state: StudyState) -> dict:
     min_m = state.get("min_active_measures", 1)
     profiles = _records_to_df(state["profiles_records"])
     required = state.get("required_interventions") or None
-    nwa_scored = agent.run(profiles, state["base_summary"], max_portfolios=max_p, required_interventions=required, min_active_measures=min_m)
+    nwa_scored = agent.run(profiles, state["base_summary"], max_portfolios=max_p, required_interventions=required, min_active_measures=min_m, use_epri=state.get("use_epri", False))
 
     best_nwa_name = nwa_scored[0]["portfolio_name"] if nwa_scored else "None"
     best_nwa_score = nwa_scored[0]["final_score"] if nwa_scored else 0
@@ -135,7 +136,7 @@ def capex_node(state: StudyState) -> dict:
     min_m = state.get("min_active_measures", 1)
     profiles = _records_to_df(state["profiles_records"])
     required = state.get("required_interventions") or None
-    capex_scored = agent.run(profiles, state["base_summary"], max_portfolios=max_p, required_interventions=required, min_active_measures=min_m)
+    capex_scored = agent.run(profiles, state["base_summary"], max_portfolios=max_p, required_interventions=required, min_active_measures=min_m, use_epri=state.get("use_epri", False))
     return {"capex_scored": capex_scored}
 
 
@@ -206,7 +207,7 @@ def build_graph():
     )
 
 
-def run_study(scenario: dict, max_portfolios: int = 60, thread_id: str = "default", required_interventions: list = None, min_active_measures: int = 1):
+def run_study(scenario: dict, max_portfolios: int = 60, thread_id: str = "default", required_interventions: list = None, min_active_measures: int = 1, use_epri: bool = False):
     """Run without interrupts (auto-approve). Used by the API for non-interactive mode."""
     graph = build_graph()
     initial_state = {
@@ -214,6 +215,7 @@ def run_study(scenario: dict, max_portfolios: int = 60, thread_id: str = "defaul
         "max_portfolios": max_portfolios,
         "min_active_measures": min_active_measures,
         "required_interventions": required_interventions or [],
+        "use_epri": use_epri,
         "profiles_records": [],
         "assumptions": {},
         "base_results": [],

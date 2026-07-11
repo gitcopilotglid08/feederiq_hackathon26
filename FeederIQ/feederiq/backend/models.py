@@ -13,6 +13,7 @@ class ScenarioRequest(BaseModel):
     max_portfolios: Optional[int] = 60
     required_interventions: Optional[list] = None
     use_real_data: bool = False  # Toggle: use openEDI profiles vs synthetic curves
+    use_epri: bool = False  # Toggle: use EPRI ckt5 feeder instead of IEEE 123-bus
 
 
 class ViolationSummary(BaseModel):

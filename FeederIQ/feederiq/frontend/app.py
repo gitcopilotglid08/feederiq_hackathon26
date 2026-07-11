@@ -717,7 +717,9 @@ def parse_line_connections():
     return edges
 
 
+@st.cache_data(show_spinner=False, ttl=3600)
 def render_grid_map():
+    """Render IEEE 123-bus feeder on a US street map (illustrative suburban placement)."""
     from pathlib import Path
     coords_path = Path(__file__).resolve().parent.parent.parent / "ai_synthetic_data" / "Buscoords.dss"
     if not coords_path.exists():
@@ -737,66 +739,214 @@ def render_grid_map():
     solar_buses = {"66", "80", "92", "104", "110"}
     dc_bus = "67"
 
-    # Parse line connections
+    # Illustrative placement: Apex, NC - typical US suburban distribution area
+    ANCHOR_LAT = 35.7327
+    ANCHOR_LON = -78.8503
+    SPREAD_LAT = 0.022
+    SPREAD_LON = 0.028
+
+    # Normalize XY to lat/lon
+    all_x = [v[0] for v in primary.values()]
+    all_y = [v[1] for v in primary.values()]
+    x_min, x_max = min(all_x), max(all_x)
+    y_min, y_max = min(all_y), max(all_y)
+    x_span = x_max - x_min or 1
+    y_span = y_max - y_min or 1
+
+    geo = {}
+    for bus, (x, y) in primary.items():
+        norm_x = (x - x_min) / x_span - 0.5
+        norm_y = (y - y_min) / y_span - 0.5
+        geo[bus] = (ANCHOR_LAT + norm_y * SPREAD_LAT, ANCHOR_LON + norm_x * SPREAD_LON)
+
     edges = parse_line_connections()
+    fig = go.Figure()
+
+    # Draw ALL lines in ONE trace
+    line_lats = []
+    line_lons = []
+    for b1, b2 in edges:
+        if b1 in geo and b2 in geo:
+            lat1, lon1 = geo[b1]
+            lat2, lon2 = geo[b2]
+            line_lats.extend([lat1, lat2, None])
+            line_lons.extend([lon1, lon2, None])
+    fig.add_trace(go.Scattermapbox(
+        lat=line_lats, lon=line_lons,
+        mode='lines', line=dict(color='#888888', width=1.5),
+        hoverinfo='skip', showlegend=False
+    ))
+
+    # Categorize buses
+    cat_order = [
+        ("Data Center", {dc_bus}, "#8B0000", 20),
+        ("EV + Solar", ev_buses & solar_buses, "#7B2D8B", 15),
+        ("EV Charging", ev_buses - solar_buses, C1, 15),
+        ("Solar PV", solar_buses - ev_buses, C_GREEN, 15),
+    ]
+    key_buses_set = ev_buses | solar_buses | {dc_bus}
+    other_buses = set(geo.keys()) - key_buses_set
+
+    # Regular buses
+    if other_buses:
+        fig.add_trace(go.Scattermapbox(
+            lat=[geo[b][0] for b in other_buses],
+            lon=[geo[b][1] for b in other_buses],
+            mode='markers',
+            marker=dict(size=5, color='#888888'),
+            text=[f"Bus {b}" for b in other_buses],
+            hoverinfo='text', showlegend=False,
+        ))
+
+    # Key asset buses with legend
+    for cat_name, bus_set, color, size in cat_order:
+        valid = [b for b in bus_set if b in geo]
+        if not valid:
+            continue
+        fig.add_trace(go.Scattermapbox(
+            lat=[geo[b][0] for b in valid],
+            lon=[geo[b][1] for b in valid],
+            mode='markers+text',
+            marker=dict(size=size, color=color),
+            text=[b for b in valid],
+            textposition='top center',
+            textfont=dict(size=10, color=C_DARK, family='Arial'),
+            hovertext=[f"<b>Bus {b}</b><br>{cat_name}" for b in valid],
+            hoverinfo='text',
+            name=f"<b>{cat_name}</b>",
+        ))
+
+    fig.update_layout(
+        mapbox=dict(
+            style='open-street-map',
+            center=dict(lat=ANCHOR_LAT, lon=ANCHOR_LON),
+            zoom=14,
+        ),
+        height=400, margin=dict(t=30, b=5, l=5, r=5),
+        paper_bgcolor='white',
+        legend=dict(orientation='h', y=1.02, x=0.5, xanchor='center',
+                    font=dict(size=11, family='Arial', color=C_DARK)),
+    )
+    return fig
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def render_gis_map():
+    """Render EPRI ckt5 real feeder on industry-standard light GIS basemap (carto-positron)."""
+    from pathlib import Path
+    import json
+    data_dir = Path(__file__).resolve().parent.parent.parent / "ai_synthetic_data"
+    coords_path = data_dir / "epri_ckt5_coords.json"
+    edges_path = data_dir / "epri_ckt5_edges.json"
+    if not coords_path.exists() or not edges_path.exists():
+        return None
+
+    with open(coords_path) as f:
+        geo = json.load(f)
+    with open(edges_path) as f:
+        edges = json.load(f)
+
+    lats = [v[0] for v in geo.values()]
+    lons = [v[1] for v in geo.values()]
+    center_lat = sum(lats) / len(lats)
+    center_lon = sum(lons) / len(lons)
 
     fig = go.Figure()
 
-    # Draw lines between connected buses
+    # ALL lines in one trace (fast)
+    line_lats = []
+    line_lons = []
     for b1, b2 in edges:
-        if b1 in primary and b2 in primary:
-            x0, y0 = primary[b1]
-            x1, y1 = primary[b2]
-            fig.add_trace(go.Scatter(
-                x=[x0, x1, None], y=[y0, y1, None],
-                mode='lines', line=dict(color='#AAAAAA', width=1),
-                hoverinfo='skip', showlegend=False
-            ))
-
-    xs, ys, colors, sizes, hovers, texts = [], [], [], [], [], []
-    for bus, (x, y) in primary.items():
-        xs.append(x); ys.append(y)
-        if bus == dc_bus:
-            colors.append("#8B0000"); sizes.append(22)
-            hovers.append(f"<b>Bus {bus}</b><br>🏢 Data Center"); texts.append(bus)
-        elif bus in ev_buses and bus in solar_buses:
-            colors.append("#7B2D8B"); sizes.append(17)
-            hovers.append(f"<b>Bus {bus}</b><br>⚡ EV + ☀️ Solar"); texts.append(bus)
-        elif bus in ev_buses:
-            colors.append(C1); sizes.append(17)
-            hovers.append(f"<b>Bus {bus}</b><br>⚡ EV Charging"); texts.append(bus)
-        elif bus in solar_buses:
-            colors.append(C_GREEN); sizes.append(17)
-            hovers.append(f"<b>Bus {bus}</b><br>☀️ Solar PV"); texts.append(bus)
-        else:
-            colors.append("#888888"); sizes.append(5)
-            hovers.append(f"Bus {bus}"); texts.append("")
-
-    fig.add_trace(go.Scatter(
-        x=xs, y=ys, mode='markers',
-        marker=dict(size=sizes, color=colors, line=dict(width=0.8, color='white')),
-        text=hovers, hoverinfo='text', showlegend=False
+        if b1 in geo and b2 in geo:
+            line_lats.extend([geo[b1][0], geo[b2][0], None])
+            line_lons.extend([geo[b1][1], geo[b2][1], None])
+    fig.add_trace(go.Scattermapbox(
+        lat=line_lats, lon=line_lons,
+        mode='lines', line=dict(color='#888888', width=1.5),
+        hoverinfo='skip', showlegend=False
     ))
 
-    key_xs = [x for x, t in zip(xs, texts) if t]
-    key_ys = [y for y, t in zip(ys, texts) if t]
-    key_texts = [t for t in texts if t]
-    fig.add_trace(go.Scatter(
-        x=key_xs, y=key_ys, mode='text', text=key_texts,
-        textposition="top center", textfont=dict(size=9, color=C_DARK, family="Arial"),
-        showlegend=False, hoverinfo='skip'
+    # Bus nodes
+    bus_list = list(geo.keys())
+    fig.add_trace(go.Scattermapbox(
+        lat=[geo[b][0] for b in bus_list],
+        lon=[geo[b][1] for b in bus_list],
+        mode='markers',
+        marker=dict(size=3, color='#888888'),
+        text=[f"Bus {b}" for b in bus_list],
+        hoverinfo='text', showlegend=False,
     ))
 
-    for lbl, clr in [("Data Center", "#8B0000"), ("EV Charging", C1), ("Solar PV", C_GREEN), ("EV + Solar", "#7B2D8B")]:
-        fig.add_trace(go.Scatter(x=[None], y=[None], mode='markers', marker=dict(size=11, color=clr), name=f"<b>{lbl}</b>"))
+    # Place EV, Solar, Data Center on selected buses (demonstrative scenario)
+    ev_buses_epri = bus_list[10:16]   # 6 EV charging locations
+    solar_buses_epri = bus_list[50:56]  # 6 solar PV locations
+    dc_bus_epri = bus_list[200]  # 1 data center
+
+    fig.add_trace(go.Scattermapbox(
+        lat=[geo[dc_bus_epri][0]], lon=[geo[dc_bus_epri][1]],
+        mode='markers', marker=dict(size=18, color='#8B0000'),
+        hovertext=["<b>Data Center</b><br>1.75 MW load"],
+        hoverinfo='text', name='<b>Data Center</b>',
+    ))
+    fig.add_trace(go.Scattermapbox(
+        lat=[geo[b][0] for b in ev_buses_epri],
+        lon=[geo[b][1] for b in ev_buses_epri],
+        mode='markers', marker=dict(size=14, color=C1),
+        hovertext=[f"<b>EV Charging</b><br>Bus {b}" for b in ev_buses_epri],
+        hoverinfo='text', name='<b>EV Charging</b>',
+    ))
+    fig.add_trace(go.Scattermapbox(
+        lat=[geo[b][0] for b in solar_buses_epri],
+        lon=[geo[b][1] for b in solar_buses_epri],
+        mode='markers', marker=dict(size=14, color=C_GREEN),
+        hovertext=[f"<b>Solar PV</b><br>Bus {b}" for b in solar_buses_epri],
+        hoverinfo='text', name='<b>Solar PV</b>',
+    ))
+
+    # Substation
+    fig.add_trace(go.Scattermapbox(
+        lat=[center_lat], lon=[center_lon],
+        mode='markers+text',
+        marker=dict(size=16, color='#1C1C1C'),
+        text=['Substation'],
+        textposition='bottom center',
+        textfont=dict(size=10, color=C_DARK, family='Arial'),
+        hovertext=[(
+            "<b>EPRI Test Circuit 5 - Real US Distribution Topology</b><br>"
+            "<b>Placement:</b> Roswell, GA (illustrative suburban location)<br>"
+            "<b>Topology:</b> Real EPRI ckt5 (981 buses, 1,050 lines)<br>"
+            "<b>Span:</b> ~2.5 x 2.9 miles<br>"
+            "<b>Source:</b> EPRI Distribution Test Circuits (public dataset)<br>"
+            "<br>"
+            "<b>Scenario assets placed:</b><br>"
+            "- 1 Data Center (1.75 MW)<br>"
+            "- 6 EV Charging stations<br>"
+            "- 6 Solar PV installations<br>"
+            "<br>"
+            "<b>Context:</b> Georgia Power territory, suburban Atlanta,<br>"
+            "SE US solar belt, growing EV + data center corridor"
+        )],
+        hoverinfo='text',
+        name='<b>Substation</b>',
+    ))
+
+    # Legend
+    fig.add_trace(go.Scattermapbox(
+        lat=[None], lon=[None], mode='markers',
+        marker=dict(size=10, color='#888888'),
+        name='<b>Distribution Lines (981 buses)</b>',
+    ))
 
     fig.update_layout(
-        height=380, margin=dict(t=30, b=5, l=5, r=5),
-        plot_bgcolor='#F8F8F8', paper_bgcolor='white',
-        xaxis=dict(visible=False), yaxis=dict(visible=False),
-        legend=dict(orientation="h", y=1.02, x=0.5, xanchor="center", font=dict(size=11, family="Arial", color=C_DARK)),
-        shapes=[dict(type="rect", x0=min(xs)-30, y0=min(ys)-30, x1=max(xs)+30, y1=max(ys)+30,
-                     line=dict(color=C_DARK, width=1), fillcolor="rgba(0,0,0,0)")]
+        mapbox=dict(
+            style='open-street-map',
+            center=dict(lat=center_lat, lon=center_lon),
+            zoom=14,
+        ),
+        height=450, margin=dict(t=30, b=5, l=5, r=5),
+        paper_bgcolor='white',
+        legend=dict(orientation='h', y=1.02, x=0.5, xanchor='center',
+                    font=dict(size=11, family='Arial', color=C_DARK)),
     )
     return fig
 
@@ -935,6 +1085,120 @@ def render_before_after_map(improvement_pct):
     return fig
 
 
+def render_before_after_map_epri(improvement_pct):
+    """Render before/after stress map for EPRI ckt5 feeder."""
+    from pathlib import Path
+    import json
+    from collections import deque
+    data_dir = Path(__file__).resolve().parent.parent.parent / "ai_synthetic_data"
+    coords_path = data_dir / "epri_ckt5_coords.json"
+    edges_path = data_dir / "epri_ckt5_edges.json"
+    if not coords_path.exists() or not edges_path.exists():
+        return None
+
+    with open(coords_path) as f:
+        geo = json.load(f)
+    with open(edges_path) as f:
+        edges = json.load(f)
+
+    bus_list = list(geo.keys())
+    ev_buses_epri = set(bus_list[10:16])
+    solar_buses_epri = set(bus_list[50:56])
+    dc_bus_epri = bus_list[200]
+    overload_sources = ev_buses_epri | {dc_bus_epri}
+
+    # Build adjacency
+    adjacency = {}
+    for b1, b2 in edges:
+        if b1 in geo and b2 in geo:
+            adjacency.setdefault(b1, set()).add(b2)
+            adjacency.setdefault(b2, set()).add(b1)
+
+    # BFS stress propagation
+    stressed_buses = set()
+    stress_distance = {}
+    queue = deque()
+    for src in overload_sources:
+        if src in geo:
+            queue.append((src, 0))
+            stress_distance[src] = 0
+            stressed_buses.add(src)
+    max_hops = 4
+    while queue:
+        bus, dist = queue.popleft()
+        if dist >= max_hops:
+            continue
+        for neighbor in adjacency.get(bus, []):
+            if neighbor not in stress_distance:
+                stress_distance[neighbor] = dist + 1
+                stressed_buses.add(neighbor)
+                queue.append((neighbor, dist + 1))
+
+    from plotly.subplots import make_subplots
+    fig = make_subplots(rows=1, cols=2, subplot_titles=["<b>Before (Baseline)</b>", "<b>After (Intervention)</b>"],
+                        horizontal_spacing=0.05)
+
+    # Draw topology lines (single trace per panel for performance)
+    for col in [1, 2]:
+        lx, ly = [], []
+        for b1, b2 in edges:
+            if b1 in geo and b2 in geo:
+                lx.extend([geo[b1][1], geo[b2][1], None])
+                ly.extend([geo[b1][0], geo[b2][0], None])
+        fig.add_trace(go.Scatter(x=lx, y=ly, mode='lines', line=dict(color='#DDDDDD', width=0.5),
+                                  hoverinfo='skip', showlegend=False), row=1, col=col)
+
+    for col, is_after in [(1, False), (2, True)]:
+        xs, ys, colors, sizes = [], [], [], []
+        for bus in geo:
+            xs.append(geo[bus][1])
+            ys.append(geo[bus][0])
+            if is_after:
+                if bus in stressed_buses:
+                    dist = stress_distance.get(bus, 0)
+                    if improvement_pct >= 80:
+                        colors.append(C_GREEN); sizes.append(4)
+                    elif improvement_pct >= 40 or dist >= 2:
+                        colors.append("#E88D14"); sizes.append(5)
+                    else:
+                        colors.append(C_GREEN if dist >= 2 else "#E88D14"); sizes.append(5)
+                else:
+                    colors.append(C_GREEN); sizes.append(3)
+            else:
+                if bus == dc_bus_epri:
+                    colors.append("#8B0000"); sizes.append(10)
+                elif bus in overload_sources:
+                    colors.append(C_RED); sizes.append(7)
+                elif bus in stressed_buses:
+                    dist = stress_distance.get(bus, 3)
+                    if dist == 1:
+                        colors.append(C_RED); sizes.append(6)
+                    elif dist == 2:
+                        colors.append(C1); sizes.append(5)
+                    else:
+                        colors.append(C2); sizes.append(4)
+                else:
+                    colors.append(C_GREEN); sizes.append(3)
+
+        fig.add_trace(go.Scatter(x=xs, y=ys, mode='markers',
+                                  marker=dict(size=sizes, color=colors, line=dict(width=0.3, color='white')),
+                                  showlegend=False, hoverinfo='skip'), row=1, col=col)
+
+    # Zoom to feeder extent
+    all_xs = [geo[b][1] for b in geo]
+    all_ys = [geo[b][0] for b in geo]
+    x_pad = (max(all_xs) - min(all_xs)) * 0.05
+    y_pad = (max(all_ys) - min(all_ys)) * 0.05
+
+    fig.update_layout(height=380, margin=dict(t=35, b=5, l=5, r=5),
+                      plot_bgcolor='#F8F8F8', paper_bgcolor='white',
+                      font=dict(family="Arial", size=10))
+    fig.update_annotations(font_size=11, font_family="Arial")
+    fig.update_xaxes(visible=False, range=[min(all_xs) - x_pad, max(all_xs) + x_pad])
+    fig.update_yaxes(visible=False, range=[min(all_ys) - y_pad, max(all_ys) + y_pad])
+    return fig
+
+
 # ─── Session State ────────────────────────────────────────────────────────────
 if "study_data" not in st.session_state:
     st.session_state.study_data = None
@@ -944,8 +1208,12 @@ if "scroll_to_top_once" not in st.session_state:
     st.session_state.scroll_to_top_once = False
 
 # ─── Sidebar ──────────────────────────────────────────────────────────────────
+sidebar_locked = st.session_state.running or st.session_state.study_data is not None
+
 with st.sidebar:
     st.markdown(f'<div style="font:700 0.95rem Arial,sans-serif;color:{C_DARK};margin-bottom:14px;border-bottom:2px solid {C1};padding-bottom:8px;">Parameter Selection</div>', unsafe_allow_html=True)
+    if sidebar_locked:
+        st.caption("⚠️ Parameters locked during/after study. Click 'New Study' to reset.")
 
     st.markdown(f'<div class="sidebar-section"><b>📅 Planning Horizon</b></div>', unsafe_allow_html=True)
     horizon = st.selectbox(
@@ -953,14 +1221,23 @@ with st.sidebar:
         format_func=lambda x: {"3m": "3 Months", "6m": "6 Months", "12m": "12 Months",
                                "18m": "18 Months", "3yr": "3 Years", "5yr": "5 Years"}[x],
         label_visibility="collapsed",
-        help="Time horizon for the planning study. Longer horizons capture compounding growth effects."
+        help="Time horizon for the planning study. Longer horizons capture compounding growth effects.",
+        disabled=sidebar_locked
     )
 
     st.markdown(f'<div class="sidebar-section"><b>📂 Data Source</b></div>', unsafe_allow_html=True)
-    use_real_data = st.checkbox("Use real load profiles (DOE openEDI)", value=False, key="real_data",
-                                help="91 bus-level measured load profiles at 15-minute resolution across 365 days. Source: DOE Open Energy Data Initiative / oedisi-ieee123. The system selects the peak-stress day from the full year for analysis.")
-    if use_real_data:
-        st.caption("Peak stress day selected from full-year dataset automatically.")
+    use_gis_map = st.checkbox("EPRI real feeder (981 buses, Roswell GA)", value=False, key="gis_map",
+                              help="Switch to a REAL US distribution feeder from the EPRI public test circuit dataset (ckt5). **981 buses, 1,050 line segments, ~2.5 x 2.9 miles.** Real feeder topology placed on a suburban Atlanta map (illustrative location). Includes EV, Solar, and Data Center scenario assets. This is a completely different, larger grid - not the IEEE 123-bus.",
+                              disabled=sidebar_locked)
+    use_real_data = st.checkbox("DOE openEDI real load profiles (IEEE 123-bus)", value=True, key="real_data",
+                                help="91 real measured load profiles from the US DOE Open Energy Data Initiative (oedisi-ieee123 dataset). Each profile covers one bus on the IEEE 123-bus feeder with 35,040 data points at 15-minute intervals across a full year (365 days). The system automatically identifies the peak-stress day from the entire year and runs simulation on that worst-case day. Data includes residential, commercial, and mixed-use load patterns. **This is actual metered utility data, not synthetic curves.**",
+                                disabled=use_gis_map)
+    if use_gis_map and use_real_data:
+        use_real_data = False
+    if use_gis_map:
+        st.caption("EPRI ckt5 real topology - 981 buses - Illustrative placement (Roswell, GA) - EV + Solar + Data Center")
+    elif use_real_data:
+        st.caption("Real US utility data - 91 bus profiles x 35,040 points - peak stress day auto-selected from 365 days")
     else:
         st.caption("Parametric synthetic profiles (math-generated 24h curves)")
 
@@ -1013,7 +1290,7 @@ with st.sidebar:
                            help="Maximum number of different interventions that can be combined in a single portfolio. Higher values explore more complex solutions but increase computation time.")
 
     st.markdown(f'<div class="sidebar-section"><b>Min Measures per Portfolio</b></div>', unsafe_allow_html=True)
-    min_active = st.slider("min measures", 1, 5, 1, label_visibility="collapsed",
+    min_active = st.slider("min measures", 1, 5, 2, label_visibility="collapsed",
                            help="Minimum number of interventions required in each portfolio. Set > 1 to exclude single-measure solutions and focus on combined approaches.")
     if min_active > max_active:
         st.warning("Min measures cannot exceed max measures. Using max value.")
@@ -1110,6 +1387,7 @@ if st.session_state.running and st.session_state.study_data is None:
         "max_portfolios": max_portfolios,
         "required_interventions": req_interventions if req_interventions else None,
         "use_real_data": use_real_data,
+        "use_epri": use_gis_map,
     }
 
     def _node_status(node_idx, current_idx):
@@ -1617,7 +1895,10 @@ Current: **{stress_val:.0f}** ({sev_txt})
         # Before/After Grid Map
         st.markdown(f'<div style="font:700 0.82rem Arial,sans-serif;color:{C_DARK};margin:14px 0 5px;">Grid Stress Visualization</div>', unsafe_allow_html=True)
         st.caption("Red nodes indicate stressed equipment. Green indicates resolved. Orange indicates partially resolved.")
-        ba_map = render_before_after_map(impr)
+        if use_gis_map:
+            ba_map = render_before_after_map_epri(impr)
+        else:
+            ba_map = render_before_after_map(impr)
         if ba_map:
             st.plotly_chart(ba_map, use_container_width=True)
 
@@ -1781,9 +2062,14 @@ Current: **{stress_val:.0f}** ({sev_txt})
             )
             st.plotly_chart(fig2, use_container_width=True)
 
-        st.markdown(f'<div class="sub-head">Existing Network Topology</div>', unsafe_allow_html=True)
-        st.caption("IEEE 123-bus test feeder. Hover over nodes for details.")
-        grid_fig = render_grid_map()
+        if use_gis_map:
+            st.markdown(f'<div class="sub-head">Real US Feeder - EPRI Test Circuit 5 (Roswell, GA)</div>', unsafe_allow_html=True)
+            st.caption("981-bus real EPRI topology - Illustrative suburban placement - EV, Solar, Data Center assets placed - Hover substation for details")
+            grid_fig = render_gis_map()
+        else:
+            st.markdown(f'<div class="sub-head">IEEE 123-Bus Feeder (Simulation Model)</div>', unsafe_allow_html=True)
+            st.caption("123-bus test feeder placed on US suburban street map - This is the grid being simulated - Hover nodes for asset details")
+            grid_fig = render_grid_map()
         if grid_fig:
             st.plotly_chart(grid_fig, use_container_width=True)
 
@@ -1849,6 +2135,38 @@ Current: **{stress_val:.0f}** ({sev_txt})
             min_net_hr = profiles["time"][net_demand.index(min(net_demand))]
             active_solution_labels = ", ".join([a["label"] for a in _active_interventions(selected_solution)]) or "No active intervention"
 
+            # LLM-generated portfolio linkage
+            try:
+                from feederiq.backend.llm_client import invoke_llm
+                linkage_prompt = f"""You are a distribution grid planning analyst. Write a 4-5 sentence portfolio linkage analysis.
+
+Profile context:
+- Feeder peaks at {peak_feeder:.2f}x base load
+- EV peak: {peak_ev:.2f} MW at {ev_peak_hr}
+- Solar peak: {peak_solar:.2f} MW at {solar_peak_hr}
+- Data center constant: {peak_dc:.2f} MW
+- Worst stress hour: {peak_net_hr}
+- Lowest stress hour: {min_net_hr}
+
+Selected portfolio: {selected_solution.get('portfolio_name', 'N/A')}
+Active interventions: {active_solution_labels}
+Grid stress reduction: {selected_solution.get('technical_improvement_pct', 0):.1f}%
+Grid relief score: {selected_solution.get('grid_relief_score', selected_solution.get('technical_score', 0)):.1f}/10
+
+Explain specifically:
+1. WHY this portfolio addresses the stress pattern (link each intervention to the profile timing)
+2. HOW the interventions work together (synergies)
+3. WHAT hours/conditions benefit most
+4. The expected operational outcome
+
+Write in third person, factual, no hedging. Plain text only, no markdown or bullet points."""
+                linkage_text = invoke_llm(linkage_prompt, max_tokens=300)
+            except Exception:
+                linkage_text = (
+                    f"{selected_solution.get('portfolio_name', 'N/A')} applies {active_solution_labels}, "
+                    f"focused on reducing the {peak_net_hr} stress window and improving hourly thermal/voltage margins."
+                )
+
             st.markdown(f'''<div style="background:#FFF8F0;border-radius:8px;padding:14px 18px;margin:10px 0;border:1px solid #F5E6D3;border-left:3px solid {C1};">
                 <div style="font:700 0.78rem Arial;color:{C1};margin-bottom:6px;">Profile Summary</div>
                 <div style="font:400 0.82rem Arial;color:{C_DARK};line-height:1.8;">
@@ -1859,9 +2177,9 @@ Current: **{stress_val:.0f}** ({sev_txt})
                 <b>Critical window:</b> Net system stress is highest at <b>{peak_net_hr}</b> when EV charging
                 coincides with evening feeder load and solar output has dropped to zero, and lowest at
                 <b>{min_net_hr}</b> during peak solar production.
-                <b>Selected portfolio linkage:</b> <b>{selected_solution.get('portfolio_name', 'N/A')}</b>
-                applies {active_solution_labels}, focused on reducing the {peak_net_hr} stress window and
-                improving hourly thermal/voltage margins observed in this profile.
+                <br><br>
+                <b>Selected portfolio linkage: {selected_solution.get('portfolio_name', 'N/A')}</b><br>
+                {linkage_text}
                 </div>
             </div>''', unsafe_allow_html=True)
 
@@ -1885,6 +2203,37 @@ Current: **{stress_val:.0f}** ({sev_txt})
             memo_clean = memo.replace("# FeederIQ Planning Decision Memo\n", "").strip()
             memo_clean = re.sub(r'## Real-World Implementation Plan.*?(?=## |$)', '', memo_clean, flags=re.DOTALL).strip()
             st.markdown(f'<div class="memo-area">{memo_clean}</div>', unsafe_allow_html=True)
+
+            # LLM-generated detailed recommendation on the proposed solution
+            try:
+                from feederiq.backend.llm_client import invoke_llm
+                reco_prompt = f"""You are a senior PwC utility consulting partner writing a recommendation for a planning decision memo.
+
+Context:
+- Selected solution: {selected_solution.get('portfolio_name', 'N/A')}
+- Final score: {selected_solution.get('final_score', 0):.2f}/10
+- Grid relief: {selected_solution.get('technical_improvement_pct', 0):.1f}% stress reduction
+- Grid stress before: {data.get('base_summary', {}).get('grid_stress_score', 0):.0f}
+- Active interventions: {', '.join([a['label'] + ' (' + a['level_label'] + ')' for a in _active_interventions(selected_solution)])}
+- Planning horizon: {data.get('scenario', {}).get('horizon_label', '12m')}
+- Feeder: {'EPRI ckt5 (981 buses)' if use_gis_map else 'IEEE 123-bus'}
+
+Write a 6-8 sentence executive recommendation paragraph that:
+1. States the recommended course of action clearly
+2. Quantifies the expected benefit (stress reduction, risk mitigation)
+3. Identifies implementation priority and sequencing
+4. Notes dependencies and risk mitigations
+5. Recommends governance checkpoints
+6. Ends with a clear call to action
+
+Write in third person, authoritative boardroom tone. Plain text, no markdown."""
+                reco_text = invoke_llm(reco_prompt, max_tokens=400)
+                st.markdown(f'''<div style="background:#F0FFF4;border-radius:8px;padding:14px 18px;margin:14px 0;border:1px solid #C8E4DB;border-left:3px solid {C_GREEN};">
+                    <div style="font:700 0.82rem Arial;color:{C_GREEN};margin-bottom:8px;">Recommendation on Proposed Solution</div>
+                    <div style="font:400 0.82rem Arial;color:{C_DARK};line-height:1.8;">{reco_text}</div>
+                </div>''', unsafe_allow_html=True)
+            except Exception:
+                pass
 
             st.markdown(
                 _implementation_pack_html(
@@ -2346,7 +2695,7 @@ Current: **{stress_val:.0f}** ({sev_txt})
                     step_name = cp["step"].replace("_", " ").title().replace("Nwa", "NWA")
                     requires_approval = cp.get("requires_approval", False)
                     status = "PASS" if not requires_approval else "FLAG"
-                    msg = _clip(cp.get("message", ""), 78)
+                    msg = cp.get("message", "")
                     pdf.table_row([status, step_name, msg], widths_log, aligns=["C", "L", "L"])
 
                 pdf.ln(4)
@@ -2421,8 +2770,13 @@ elif not st.session_state.study_data and not st.session_state.running:
 
     st.caption("Configure parameters in the sidebar and click **Run Study**.")
 
-    st.markdown(f'<div class="sub-head">Existing Network Topology</div>', unsafe_allow_html=True)
-    st.caption("IEEE 123-bus distribution feeder with scenario assets. Hover for details.")
-    grid_fig = render_grid_map()
+    if use_gis_map:
+        st.markdown(f'<div class="sub-head">Real US Feeder - EPRI Test Circuit 5 (Roswell, GA)</div>', unsafe_allow_html=True)
+        st.caption("981-bus real EPRI topology - Illustrative suburban placement - EV, Solar, Data Center assets placed - Hover substation for details")
+        grid_fig = render_gis_map()
+    else:
+        st.markdown(f'<div class="sub-head">IEEE 123-Bus Feeder (Simulation Model)</div>', unsafe_allow_html=True)
+        st.caption("123-bus test feeder placed on US suburban street map - This is the grid being simulated - Hover nodes for asset details")
+        grid_fig = render_grid_map()
     if grid_fig:
         st.plotly_chart(grid_fig, use_container_width=True)

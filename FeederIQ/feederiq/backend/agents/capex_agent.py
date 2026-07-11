@@ -2,6 +2,7 @@ import re
 from pathlib import Path
 from ..simulation.portfolios import generate_portfolios, score_portfolio, summarize_results
 from ..simulation.engine import run_24hr_simulation
+from ..simulation.engine_epri import run_epri_24hr_simulation
 from ..simulation.portfolios import apply_portfolio_to_profiles, line_capacity_multiplier, transformer_capacity_multiplier
 
 INSTRUCTIONS_PATH = Path(__file__).parent / "instructions" / "capex_agent.md"
@@ -34,7 +35,7 @@ class CapexAgent:
         self.config = _parse_config(self.instructions)
         self.require_key = self.config.get("require_intervention", "TransformerUpgrade")
 
-    def run(self, profiles, base_summary: dict, max_portfolios: int = 30, required_interventions: list = None, min_active_measures: int = 1) -> list:
+    def run(self, profiles, base_summary: dict, max_portfolios: int = 30, required_interventions: list = None, min_active_measures: int = 1, use_epri: bool = False) -> list:
         all_portfolios = generate_portfolios(max_active_measures=3, min_active_measures=min_active_measures, required_interventions=required_interventions)
         capex_portfolios = [p for p in all_portfolios if p.get(self.require_key, 0) > 0]
         capex_portfolios = capex_portfolios[:max_portfolios]
@@ -46,7 +47,7 @@ class CapexAgent:
             modified = apply_portfolio_to_profiles(profiles, portfolio)
             cap_line = line_capacity_multiplier(portfolio["TransformerUpgrade"])
             cap_xf = transformer_capacity_multiplier(portfolio["TransformerUpgrade"])
-            results = run_24hr_simulation(modified, portfolio, cap_mult_line=cap_line, cap_mult_xf=cap_xf)
+            results = (run_epri_24hr_simulation if use_epri else run_24hr_simulation)(modified, portfolio, cap_mult_line=cap_line, cap_mult_xf=cap_xf)
             alt_summary = summarize_results(results)
             improvement = max(0.0, (base_stress - alt_summary["grid_stress_score"]) / base_stress * 100.0)
             score_row = score_portfolio(portfolio, improvement)
