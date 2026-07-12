@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from itertools import product
 from ..config import (
     INTERVENTION_KEYS, LEVELS, LEVEL_LABELS, INTERVENTION_LABELS,

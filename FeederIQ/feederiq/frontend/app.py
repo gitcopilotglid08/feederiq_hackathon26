@@ -371,7 +371,7 @@ Do not use markdown.
         },
     }
 
-    raw = invoke_llm(system_prompt, json.dumps(user_context, indent=2), max_tokens=1800)
+    raw = invoke_llm(system_prompt, json.dumps(user_context, indent=2), max_tokens=1000)
     parsed = _extract_json_dict(raw)
     if not parsed:
         return fallback
@@ -422,7 +422,32 @@ def _intervention_key_from_label(label):
         "battery": "Battery",
         "transformerupgrade": "TransformerUpgrade",
     }
-    return mapping.get(norm, "")
+    # Exact match first
+    if norm in mapping:
+        return mapping[norm]
+    # Substring/prefix match for LLM-generated labels with extra text (e.g. "capacityupgradelow")
+    for key, val in mapping.items():
+        if norm.startswith(key) or key.startswith(norm):
+            return val
+    # Partial keyword match
+    keyword_map = {
+        "capacity": "TransformerUpgrade",
+        "transformer": "TransformerUpgrade",
+        "battery": "Battery",
+        "storage": "Battery",
+        "managedcharging": "ManagedCharging",
+        "evcharging": "ManagedCharging",
+        "staged": "PhasedInterconnection",
+        "phased": "PhasedInterconnection",
+        "interconnection": "PhasedInterconnection",
+        "tariff": "DemandTariff",
+        "dynamic": "DemandTariff",
+        "demand": "DemandTariff",
+    }
+    for keyword, val in keyword_map.items():
+        if keyword in norm:
+            return val
+    return ""
 
 
 def _fallback_intervention_level_guide():
@@ -642,7 +667,7 @@ Do not add a top-level title.
         "intervention_reference": (docs_bundle.get("Intervention explainer.md", "") or "")[:12000],
     }
 
-    raw = invoke_llm(system_prompt, json.dumps(context, indent=2), max_tokens=2200)
+    raw = invoke_llm(system_prompt, json.dumps(context, indent=2), max_tokens=1200)
     text = (raw or "").strip()
     if not text or "## Executive Summary" not in text:
         return fallback
@@ -2269,6 +2294,19 @@ Explain: WHY this portfolio addresses the stress pattern, HOW interventions work
     if selected_results_section == "📝 Memo":
         st.markdown('<div class="sec-head">Planning Decision Memo</div>', unsafe_allow_html=True)
         memo = selected_memo or data.get("memo", "")
+
+        # Fetch LLM-generated memo on-demand if not yet rich
+        if not memo or ("## Executive Summary" not in memo) or len(memo) < 500:
+            study_id = data.get("study_id", "")
+            if study_id:
+                try:
+                    import requests
+                    memo_resp = requests.get(f"http://localhost:8000/study/{study_id}/memo", timeout=30)
+                    if memo_resp.status_code == 200:
+                        memo = memo_resp.json().get("memo", memo)
+                except Exception:
+                    pass
+
         if memo:
             # Remove duplicate title and custom implementation section (rendered once below with tooltips)
             memo_clean = memo.replace("# FeederIQ Planning Decision Memo\n", "").strip()

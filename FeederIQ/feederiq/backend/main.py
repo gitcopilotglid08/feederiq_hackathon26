@@ -95,6 +95,37 @@ def get_study(study_id: str):
     return studies[study_id]
 
 
+@app.get("/study/{study_id}/memo")
+def get_study_memo(study_id: str):
+    """Generate LLM decision memo on-demand (deferred from study run for speed)."""
+    if study_id not in studies:
+        raise HTTPException(status_code=404, detail="Study not found")
+
+    study = studies[study_id]
+
+    # If already generated via LLM (has ## Executive Summary), return cached
+    memo = study.get("memo", "")
+    if memo and "## Executive Summary" in memo and len(memo) > 500:
+        return {"memo": memo}
+
+    # Generate via LLM now
+    from .agents.recommendation_agent import RecommendationAgent
+    agent = RecommendationAgent()
+    base_summary = study.get("base_summary", {})
+    top = study.get("top_recommendation", {})
+    second = study.get("second_best", {})
+    ranking = study.get("ranking", [])
+    assumptions = study.get("scenario", {})
+    nwa_resolved = study.get("nwa_resolved_all", False)
+
+    llm_memo = agent._generate_memo_llm(top, second, base_summary, assumptions, nwa_resolved, ranking[:5])
+    if llm_memo:
+        study["memo"] = llm_memo
+        return {"memo": llm_memo}
+
+    return {"memo": memo}
+
+
 @app.get("/options")
 def get_options():
     """Return all available scenario options for the frontend."""

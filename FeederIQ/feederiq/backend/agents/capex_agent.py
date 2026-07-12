@@ -1,9 +1,9 @@
 import re
 from pathlib import Path
 from ..simulation.portfolios import generate_portfolios, score_portfolio, summarize_results
-from ..simulation.engine import run_24hr_simulation
-from ..simulation.engine_epri import run_epri_24hr_simulation
 from ..simulation.portfolios import apply_portfolio_to_profiles, line_capacity_multiplier, transformer_capacity_multiplier
+from ..simulation.engine import run_24hr_simulation, prepare_simulation, run_24hr_fast
+from ..simulation.engine_epri import run_epri_24hr_simulation, prepare_epri_simulation, run_epri_24hr_fast
 
 INSTRUCTIONS_PATH = Path(__file__).parent / "instructions" / "capex_agent.md"
 
@@ -43,11 +43,18 @@ class CapexAgent:
         scored = []
         base_stress = max(base_summary["grid_stress_score"], 1e-6)
 
+        # Compile feeder once for all portfolios (avoids redundant recompilation)
+        epri_ctx = prepare_epri_simulation() if use_epri else None
+        ieee_ctx = prepare_simulation() if not use_epri else None
+
         for portfolio in capex_portfolios:
             modified = apply_portfolio_to_profiles(profiles, portfolio)
             cap_line = line_capacity_multiplier(portfolio["TransformerUpgrade"])
             cap_xf = transformer_capacity_multiplier(portfolio["TransformerUpgrade"])
-            results = (run_epri_24hr_simulation if use_epri else run_24hr_simulation)(modified, portfolio, cap_mult_line=cap_line, cap_mult_xf=cap_xf)
+            if use_epri:
+                results = run_epri_24hr_fast(epri_ctx, modified, portfolio, cap_mult_line=cap_line, cap_mult_xf=cap_xf)
+            else:
+                results = run_24hr_fast(ieee_ctx, modified, portfolio, cap_mult_line=cap_line, cap_mult_xf=cap_xf)
             alt_summary = summarize_results(results)
             improvement = max(0.0, (base_stress - alt_summary["grid_stress_score"]) / base_stress * 100.0)
             score_row = score_portfolio(portfolio, improvement)

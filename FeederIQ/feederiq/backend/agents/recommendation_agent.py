@@ -32,10 +32,8 @@ class RecommendationAgent:
             if "alt_summary" in best_nwa and best_nwa["alt_summary"]["grid_stress_score"] == 0:
                 nwa_resolved = True
 
-        # Try LLM-generated memo first, fall back to template
-        memo = self._generate_memo_llm(top, second, base_summary, assumptions, nwa_resolved, ranking[:5])
-        if not memo:
-            memo = self._generate_memo_template(top, second, base_summary, assumptions, nwa_resolved)
+        # Use instant template for study response; LLM memo is generated on-demand via /memo endpoint
+        memo = self._generate_memo_template(top, second, base_summary, assumptions, nwa_resolved)
 
         return {
             "ranking": ranking,
@@ -85,7 +83,7 @@ RUNNER-UP: {second.get('portfolio_name', 'N/A') if second else 'N/A'} (Score: {s
 TOP 5 RANKED:
 """ + "\n".join([f"  {i+1}. {r.get('portfolio_name','?')} (score={r.get('final_score',0):.2f}, improvement={r.get('technical_improvement_pct',0):.1f}%)" for i, r in enumerate(top5)])
 
-        return invoke_llm(system_prompt, context, max_tokens=2000)
+        return invoke_llm(system_prompt, context, max_tokens=1200)
 
     def _generate_memo_template(self, top, second, base_summary, assumptions, nwa_resolved):
         """Fallback template-based memo when LLM is unavailable."""
