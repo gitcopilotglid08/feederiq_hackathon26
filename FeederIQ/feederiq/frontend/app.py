@@ -1789,8 +1789,7 @@ if st.session_state.study_data:
                 f"<b>{escape(_a['label'])}</b><br>"
                 f"<b>Low (33):</b> {escape(_g.get('low','N/A'))}<br>"
                 f"<b>Medium (66):</b> {escape(_g.get('medium','N/A'))}<br>"
-                f"<b>High (100):</b> {escape(_g.get('high','N/A'))}<br>"
-                f"<b>Implementation Intent:</b> {escape(_g.get('implementation','N/A'))}"
+                f"<b>High (100):</b> {escape(_g.get('high','N/A'))}"
             )
         _tip_html = "<hr style='margin:6px 0;border:none;border-top:1px solid #EDE2D8;'>".join(_tip_parts) if _tip_parts else "No active interventions."
         _info_icon = (
