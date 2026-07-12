@@ -250,3 +250,49 @@ Key terms to mention:
 
 One-line response:
 "Loudoun County has data centers, EV growth, and a solar mandate — exactly the scenario our tool models."
+
+---
+
+## Q7. How many customers will actually be willing to let their utility see and control their EV charging?
+
+Short answer:
+Industry data shows 50–70% of residential EV owners opt in to managed charging programs when offered meaningful incentives (bill credits, TOU savings, or free charger hardware). Enrollment scales with trust, simplicity, and tangible value.
+
+Interview-safe explanation:
+- **Current opt-in rates from real programs.**
+	Utilities running managed charging pilots consistently report 50–70% enrollment among eligible EV owners. Examples: Con Edison's SmartCharge program, Duke Energy's Park & Plug, Pacific Gas & Electric's EV Charge Network, and GM Energy / PG&E V2H pilots. These are voluntary programs with financial incentives.
+
+- **What drives willingness.**
+	Three factors dominate: (1) **Financial incentive** — bill credits of $5–$15/month or TOU rate savings make participation rational. (2) **Convenience and override ability** — customers enroll more when they can override or set departure-time guarantees ("my car is full by 7 AM"). (3) **Trust in the utility** — transparent communication about what is controlled, when, and why.
+
+- **What suppresses willingness.**
+	Lack of awareness (many EV owners do not know programs exist), privacy concerns about charging data, and fear of losing control ("will my car be dead when I need it?"). Programs that offer clear opt-out or override mechanisms address the control concern directly.
+
+- **Why this matters for our product.**
+	FeederIQ models managed EV charging as an intervention. We do not assume 100% participation. Our simulation can parameterize adoption rate (e.g., 30%, 50%, 70%) and show planners the grid impact at each level. This makes the recommendation honest and actionable: planners see what adoption rate is needed to avoid a capacity upgrade, and what the fallback is if adoption is lower.
+
+- **How to defend the managed charging intervention.**
+	Say: "We model managed charging at realistic adoption levels, not 100%. The value of the tool is showing planners the tipping point — what participation rate avoids a $2M transformer upgrade versus what rate only delays it."
+
+Key terms to mention:
+- Opt-in rate / enrollment rate
+- Time-of-use (TOU) shifting
+- Demand response (DR) for EVs
+- Override / departure-time guarantee
+- Parameterized adoption sensitivity
+- Incentive design (bill credit, free hardware)
+
+20-second panel version:
+"Real utility programs see 50–70% opt-in for managed EV charging when incentives are clear and customers can override. Our tool does not assume 100% — we let planners set the adoption rate and see how grid impacts change at 30%, 50%, or 70%, so recommendations are realistic and defensible."
+
+One-line response:
+"50–70% opt-in is typical in incentivized programs, and our tool lets planners test sensitivity across adoption levels rather than assuming full participation."
+
+If they ask "What if customers refuse?":
+"That is exactly what our sensitivity analysis shows. If adoption is too low to avoid violations, the tool recommends the next-best intervention — like targeted infrastructure upgrades — so the planner always has a fallback."
+
+If they ask "Is managed charging actually deployed anywhere?":
+"Yes. Con Edison SmartCharge NY, Duke Energy Park & Plug, PG&E EV Charge Network, and multiple California CCAs run active managed charging programs today. Several have moved from pilot to full program status."
+
+If they ask "How is this different from simple TOU rates?":
+"TOU shifts behavior with price signals but gives the utility no direct control. Managed charging adds utility-dispatchable load reduction — the utility can actively curtail or shift charging during grid stress events, not just hope the price signal works."

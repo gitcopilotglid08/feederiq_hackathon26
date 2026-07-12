@@ -1779,9 +1779,29 @@ if st.session_state.study_data:
         else:
             score_color = "#C92A2A"
 
+        # Build intervention-level tooltip for the solution card
+        _active = _active_interventions(selected)
+        _lg = intervention_level_guide or _fallback_intervention_level_guide()
+        _tip_parts = []
+        for _a in _active:
+            _g = _lg.get(_a['key'], {})
+            _tip_parts.append(
+                f"<b>{escape(_a['label'])}</b><br>"
+                f"<b>Low (33):</b> {escape(_g.get('low','N/A'))}<br>"
+                f"<b>Medium (66):</b> {escape(_g.get('medium','N/A'))}<br>"
+                f"<b>High (100):</b> {escape(_g.get('high','N/A'))}<br>"
+                f"<b>Implementation Intent:</b> {escape(_g.get('implementation','N/A'))}"
+            )
+        _tip_html = "<hr style='margin:6px 0;border:none;border-top:1px solid #EDE2D8;'>".join(_tip_parts) if _tip_parts else "No active interventions."
+        _info_icon = (
+            f"<details class='lvl-tip'><summary>ⓘ</summary>"
+            f"<div>{_tip_html}</div>"
+            f"</details>"
+        ) if _tip_parts else ""
+
         st.markdown(f'''<div class="rank-card top" style="margin:10px 0;">
             <div style="display:flex;align-items:center;justify-content:space-between;">
-                <div style="font:700 1.05rem Arial,sans-serif;color:{C_DARK};">{selected["portfolio_name"]}</div>
+                <div style="font:700 1.05rem Arial,sans-serif;color:{C_DARK};">{selected["portfolio_name"]} {_info_icon}</div>
                 <div style="font:800 1.4rem Arial,sans-serif;color:{score_color};">{selected["final_score"]:.2f} <span style="font:400 0.75rem Arial;color:{C_GREY};">/ 10</span></div>
             </div>
         </div>''', unsafe_allow_html=True)
